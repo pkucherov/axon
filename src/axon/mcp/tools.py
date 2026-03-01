@@ -13,15 +13,21 @@ import re
 from pathlib import Path
 from typing import Any
 
+from axon.core.cypher_guard import WRITE_KEYWORDS
 from axon.core.search.hybrid import hybrid_search
 from axon.core.storage.base import StorageBackend
+from axon.core.storage.kuzu_backend import escape_cypher as _escape_cypher
 
 logger = logging.getLogger(__name__)
 
 MAX_TRAVERSE_DEPTH = 10
 
+# Regex to validate file paths before interpolating into Cypher queries.
+# Allows alphanumeric characters, dots, slashes, hyphens, underscores, and spaces.
+_SAFE_PATH = re.compile(r"^[a-zA-Z0-9._/\-\s]+$")
 
-from axon.core.storage.kuzu_backend import escape_cypher as _escape_cypher
+# Strip single-line (//) and multi-line (/* */) comments before write-keyword checks.
+_COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
 
 
 def _confidence_tag(confidence: float) -> str:
@@ -172,15 +178,19 @@ def handle_query(storage: StorageBackend, query: str, limit: int = 20) -> str:
     Args:
         storage: The storage backend to search against.
         query: Text search query.
-        limit: Maximum number of results (default 20).
+        limit: Maximum number of results (default 20, capped at 100).
 
     Returns:
         Formatted search results grouped by process, with file, name, label,
         and snippet for each result.
     """
+    limit = max(1, min(limit, 100))
+
     from axon.core.embeddings.embedder import embed_query
 
     query_embedding = embed_query(query)
+    if query_embedding is None:
+        logger.warning("embed_query returned None; falling back to FTS-only search")
 
     results = hybrid_search(query, storage, query_embedding=query_embedding, limit=limit)
     if not results:
@@ -202,6 +212,9 @@ def handle_context(storage: StorageBackend, symbol: str) -> str:
     Returns:
         Formatted view including callers, callees, type refs, and guidance.
     """
+    if not symbol or not symbol.strip():
+        return "Error: 'symbol' parameter is required and cannot be empty."
+
     results = _resolve_symbol(storage, symbol)
     if not results:
         return f"Symbol '{symbol}' not found."
@@ -272,6 +285,9 @@ def handle_impact(storage: StorageBackend, symbol: str, depth: int = 3) -> str:
     Returns:
         Formatted impact analysis with depth-grouped sections.
     """
+    if not symbol or not symbol.strip():
+        return "Error: 'symbol' parameter is required and cannot be empty."
+
     depth = max(1, min(depth, MAX_TRAVERSE_DEPTH))
 
     results = _resolve_symbol(storage, symbol)
@@ -373,7 +389,9 @@ def handle_detect_changes(storage: StorageBackend, diff: str) -> str:
         hunk_match = _DIFF_HUNK_PATTERN.match(line)
         if hunk_match and current_file is not None:
             start = int(hunk_match.group(1))
-            count = int(hunk_match.group(2) or "1")
+            # Use max(1, ...) so pure-deletion hunks (count=0) don't produce
+            # an inverted range (start - 1 < start).
+            count = max(1, int(hunk_match.group(2) or "1"))
             changed_files[current_file].append((start, start + count - 1))
 
     if not changed_files:
@@ -386,6 +404,15 @@ def handle_detect_changes(storage: StorageBackend, diff: str) -> str:
     for file_path, ranges in changed_files.items():
         affected_symbols = []
         try:
+            # Reject paths with characters outside the safe set to prevent
+            # Cypher injection via the f-string interpolation below.
+            if not _SAFE_PATH.match(file_path):
+                logger.warning("Skipping unsafe file path in diff: %r", file_path)
+                lines.append(f"  {file_path}:")
+                lines.append("    (skipped: path contains unsafe characters)")
+                lines.append("")
+                continue
+
             rows = storage.execute_raw(
                 f"MATCH (n) WHERE n.file_path = '{_escape_cypher(file_path)}' "
                 f"AND n.start_line > 0 "
@@ -424,8 +451,6 @@ def handle_detect_changes(storage: StorageBackend, diff: str) -> str:
     lines.append("Next: Use impact() on affected symbols to see downstream effects.")
     return "\n".join(lines)
 
-from axon.core.cypher_guard import WRITE_KEYWORDS
-
 def handle_cypher(storage: StorageBackend, query: str) -> str:
     """Execute a raw Cypher query and return formatted results.
 
@@ -439,7 +464,9 @@ def handle_cypher(storage: StorageBackend, query: str) -> str:
     Returns:
         Formatted query results, or an error message if execution fails.
     """
-    if WRITE_KEYWORDS.search(query):
+    # Strip comments so write keywords hidden inside comment blocks are detected.
+    cleaned_query = _COMMENT_RE.sub("", query)
+    if WRITE_KEYWORDS.search(cleaned_query):
         return (
             "Query rejected: only read-only queries (MATCH/RETURN) are allowed. "
             "Write operations (DELETE, DROP, CREATE, SET, MERGE) are not permitted."

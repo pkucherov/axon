@@ -47,6 +47,10 @@ def _detect_source_roots(file_index: dict[str, str]) -> set[str]:
     ``__init__.py``).  For a ``src/`` layout like ``src/mypackage/__init__.py``
     where ``src/__init__.py`` does not exist, ``src`` is the source root.
 
+    Limitation: nested namespace packages (PEP 420) without ``__init__.py``
+    at intermediate levels are not detected. This heuristic assumes each
+    top-level package has an ``__init__.py``.
+
     Returns:
         A set of source root prefixes (e.g. ``{"src"}``).
     """
@@ -184,6 +188,9 @@ def _resolve_python_relative(
     ``from ..models import User``  -> two dots -> parent directory
     """
     module = import_info.module
+    # Contract: ImportInfo.module includes leading dots for relative imports.
+    # e.g. ".utils" -> 1 dot (same dir), "..models" -> 2 dots (parent dir).
+    assert module.startswith("."), f"Expected relative import, got {module!r}"
 
     dot_count = 0
     for ch in module:

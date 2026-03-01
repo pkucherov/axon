@@ -280,9 +280,21 @@ class PythonParser(LanguageParser):
         superclasses = node.child_by_field_name("superclasses")
         if superclasses is not None:
             for child in superclasses.children:
-                if child.is_named and child.type == "identifier":
+                if not child.is_named:
+                    continue
+                if child.type == "identifier":
                     parent_name = child.text.decode("utf8")
                     result.heritage.append((class_name, "extends", parent_name))
+                elif child.type == "attribute":
+                    # e.g. class Foo(module.Base): — capture "module.Base"
+                    parent_name = child.text.decode("utf8")
+                    result.heritage.append((class_name, "extends", parent_name))
+                elif child.type == "subscript":
+                    # e.g. class Foo(Generic[T]): — capture "Generic"
+                    base = child.child_by_field_name("value")
+                    if base is not None:
+                        parent_name = base.text.decode("utf8")
+                        result.heritage.append((class_name, "extends", parent_name))
 
         body = node.child_by_field_name("body")
         if body is not None:
@@ -456,6 +468,9 @@ class PythonParser(LanguageParser):
                                         )
                                     )
                             break
+            for child in node.children:
+                self._extract_calls_recursive(child, result)
+            return  # prevent fall-through to generic child recursion
 
         # raise SomeError (without parens) — reference to the exception class.
         if node.type == "raise_statement":
@@ -467,6 +482,9 @@ class PythonParser(LanguageParser):
                             line=child.start_point[0] + 1,
                         )
                     )
+            for child in node.children:
+                self._extract_calls_recursive(child, result)
+            return  # prevent fall-through to generic child recursion
 
         for child in node.children:
             self._extract_calls_recursive(child, result)

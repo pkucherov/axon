@@ -28,9 +28,9 @@ class TestVersion:
         assert result.exit_code == 0
         assert f"Axon v{__version__}" in result.output
 
-    def test_version_string_format(self) -> None:
+    def test_version_exit_code(self) -> None:
         result = runner.invoke(app, ["--version"])
-        assert f"Axon v{__version__}" in result.output
+        assert result.exit_code == 0
 
 
 class TestHelp:
@@ -120,11 +120,13 @@ class TestListRepos:
     def test_list_no_repos(self, tmp_path: Path, monkeypatch: "pytest.MonkeyPatch") -> None:
         """List should show 'no repos' message when none are indexed."""
         monkeypatch.chdir(tmp_path)
-        # Patch the global registry to a non-existent dir so the fallback also fails
-        result = runner.invoke(app, ["list"])
+        with patch(
+            "axon.mcp.tools.handle_list_repos",
+            return_value="No indexed repositories found.",
+        ):
+            result = runner.invoke(app, ["list"])
         assert result.exit_code == 0
-        # handle_list_repos returns "No indexed repositories found." when nothing found
-        assert "No indexed repositories found" in result.output or "repositories" in result.output.lower()
+        assert "No indexed repositories found" in result.output
 
 
 class TestClean:
@@ -157,6 +159,7 @@ class TestClean:
         (axon_dir / "meta.json").write_text("{}", encoding="utf-8")
 
         result = runner.invoke(app, ["clean"], input="n\n")
+        assert result.exit_code == 0
         assert axon_dir.exists()  # Not deleted
 
 
@@ -336,14 +339,12 @@ class TestMcp:
 
     def test_mcp_calls_server_main(self) -> None:
         """MCP command should call asyncio.run(mcp_main())."""
-        with patch("axon.cli.main.asyncio", create=True) as mock_asyncio:
-            with patch("axon.mcp.server.main") as mock_mcp_main:
-                # We need to mock at the import level inside the function
-                import asyncio as real_asyncio
+        import asyncio as real_asyncio
 
-                with patch.object(real_asyncio, "run") as mock_run:
-                    result = runner.invoke(app, ["mcp"])
-                    mock_run.assert_called_once()
+        with patch.object(real_asyncio, "run") as mock_run:
+            result = runner.invoke(app, ["mcp"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
 
 
 class TestServe:
@@ -361,7 +362,8 @@ class TestServe:
 
         with patch.object(real_asyncio, "run") as mock_run:
             result = runner.invoke(app, ["serve"])
-            mock_run.assert_called_once()
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
 
 
 class TestWatch:

@@ -33,7 +33,9 @@ def get_overview(storage: StorageBackend) -> str:
             lines.append("Node counts by type:")
             total = 0
             for row in rows:
-                label = row[0] if row else "Unknown"
+                # KuzuDB returns labels(n) as a list, e.g. ["Function"].
+                raw_label = row[0] if row else "Unknown"
+                label = raw_label[0] if isinstance(raw_label, list) and raw_label else str(raw_label)
                 count = row[1] if len(row) > 1 else 0
                 lines.append(f"  {label}: {count}")
                 total += count

@@ -34,7 +34,7 @@ export const PRESET_QUERIES: PresetQuery[] = [
   {
     label: 'Largest classes',
     query:
-      "MATCH (c:Class)<-[r:CodeRelation]-(m:Method) WHERE r.rel_type = 'defines' RETURN c.name, count(m) AS methods ORDER BY methods DESC LIMIT 10",
+      "MATCH (m:Method) WHERE m.class_name <> '' RETURN m.class_name AS class, count(m) AS methods ORDER BY methods DESC LIMIT 10",
   },
   {
     label: 'Cross-community calls',

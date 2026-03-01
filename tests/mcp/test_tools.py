@@ -386,6 +386,12 @@ class TestHandleCypher:
         assert "failed" in result.lower()
         assert "Syntax error" in result
 
+    def test_handle_cypher_rejects_write(self, mock_storage):
+        """Write queries are rejected without touching storage."""
+        result = handle_cypher(mock_storage, "DELETE (n)")
+        assert "not permitted" in result.lower() or "not allowed" in result.lower()
+        mock_storage.execute_raw.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # Resource handlers

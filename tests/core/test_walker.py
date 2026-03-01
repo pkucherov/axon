@@ -180,19 +180,18 @@ class TestWalkRepoGitignore:
     """walk_repo respects gitignore patterns."""
 
     def test_walk_repo_gitignore(self, tmp_repo: Path) -> None:
-        # Create a .log file that should be ignored by .gitignore pattern
-        (tmp_repo / "debug.log").write_text("log data", encoding="utf-8")
-        # Also create a .py file named with log to make sure it's NOT ignored
+        # Create a .py file that should be excluded by a gitignore pattern.
+        (tmp_repo / "secret.py").write_text("password = 'hunter2'", encoding="utf-8")
+        # Another .py file that should NOT be excluded.
         (tmp_repo / "logger.py").write_text("import logging", encoding="utf-8")
 
-        gitignore_patterns = ["*.log"]
+        gitignore_patterns = ["secret.py"]
         entries = walk_repo(tmp_repo, gitignore_patterns=gitignore_patterns)
         paths = {e.path for e in entries}
 
-        # .log file would not be included anyway (unsupported extension)
-        # but let's verify the pattern works on a supported file too
-        assert "debug.log" not in paths
-        # logger.py should still be present (not matching *.log)
+        # secret.py matches the gitignore pattern and must be excluded.
+        assert "secret.py" not in paths
+        # logger.py does not match and must still be present.
         assert "logger.py" in paths
 
 

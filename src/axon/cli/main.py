@@ -359,7 +359,14 @@ def watch() -> None:
 
     if not (axon_dir / "meta.json").exists():
         console.print("[bold]Running initial index...[/bold]")
-        run_pipeline(repo_path, storage, full=True)
+        _, result = run_pipeline(repo_path, storage, full=True)
+        meta = _build_meta(result, repo_path)
+        meta_path = axon_dir / "meta.json"
+        meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+        try:
+            _register_in_global_registry(meta, repo_path)
+        except Exception:
+            logger.debug("Failed to register repo in global registry", exc_info=True)
 
     console.print(f"[bold]Watching[/bold] {repo_path} for changes (Ctrl+C to stop)")
 

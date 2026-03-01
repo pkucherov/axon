@@ -152,7 +152,7 @@ class TestProcessCommunities:
         community_nodes = two_cluster_graph.get_nodes_by_label(
             NodeLabel.COMMUNITY
         )
-        assert len(community_nodes) >= 1
+        assert len(community_nodes) >= 2
         # Each community node must have the correct label.
         for node in community_nodes:
             assert node.label == NodeLabel.COMMUNITY

@@ -32,10 +32,14 @@ def get_processes(request: Request) -> dict:
 
     processes = []
     for row in rows:
-        _, pname, node_ids, step_numbers = row
+        try:
+            _, pname, node_ids, step_numbers = row
+        except (ValueError, IndexError) as e:
+            logger.debug("Row unpacking failed: %s", e)
+            continue
         steps = sorted(
             [{"nodeId": nid, "stepNumber": sn} for nid, sn in zip(node_ids or [], step_numbers or [])],
-            key=lambda s: s["stepNumber"],
+            key=lambda s: (s["stepNumber"] is None, s["stepNumber"] or 0),
         )
         processes.append({
             "name": pname,

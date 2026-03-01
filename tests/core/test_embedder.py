@@ -517,6 +517,65 @@ def _make_incremental_graph() -> KnowledgeGraph:
     return graph
 
 
+# ---------------------------------------------------------------------------
+# Tests — Node-to-embedding alignment
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddingAlignment:
+    """Verify each node receives the correct embedding vector (no index skew)."""
+
+    @patch("axon.core.embeddings.embedder.generate_text")
+    @patch("fastembed.TextEmbedding")
+    def test_embedding_alignment(
+        self, mock_te_cls: MagicMock, mock_gen_text: MagicMock
+    ) -> None:
+        """node_a and node_b each receive a distinct embedding vector.
+
+        embed_graph processes nodes in a stable order and zips node IDs with
+        the embedding iterator; each node must receive the embedding that was
+        generated at the corresponding position.
+        """
+        graph = KnowledgeGraph()
+        node_a = GraphNode(
+            id="function:src/a.py:func_a",
+            label=NodeLabel.FUNCTION,
+            name="func_a",
+            file_path="src/a.py",
+        )
+        node_b = GraphNode(
+            id="function:src/b.py:func_b",
+            label=NodeLabel.FUNCTION,
+            name="func_b",
+            file_path="src/b.py",
+        )
+        graph.add_node(node_a)
+        graph.add_node(node_b)
+
+        # Distinguishable texts so we know which node maps to which vector.
+        mock_gen_text.side_effect = lambda node, *args, **kwargs: (
+            "text for func_a" if node.id == node_a.id else "text for func_b"
+        )
+
+        # Two distinguishable embedding vectors.
+        embedding_a = np.array([1.0, 0.0, 0.0])
+        embedding_b = np.array([0.0, 1.0, 0.0])
+
+        mock_model = MagicMock()
+        mock_te_cls.return_value = mock_model
+        # The model yields vectors in the same order texts are passed.
+        mock_model.embed.return_value = iter([embedding_a, embedding_b])
+
+        results = embed_graph(graph)
+
+        assert len(results) == 2
+        by_id = {r.node_id: r.embedding for r in results}
+        assert node_a.id in by_id
+        assert node_b.id in by_id
+        # The two nodes must have received different embeddings.
+        assert by_id[node_a.id] != by_id[node_b.id]
+
+
 class TestEmbedNodes:
     """embed_nodes generates embeddings for a specific set of node IDs."""
 

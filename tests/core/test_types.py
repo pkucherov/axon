@@ -348,3 +348,34 @@ class TestProcessTypesReturnType:
         assert rel.source == validate_id
         assert rel.target == user_id
         assert rel.properties["role"] == "return"
+
+
+# ---------------------------------------------------------------------------
+# process_types — TypeRef outside any symbol boundary
+# ---------------------------------------------------------------------------
+
+
+class TestProcessTypesOutsideSymbolBoundary:
+    """TypeRef at a line not inside any symbol boundary produces no relationship."""
+
+    def test_type_ref_outside_symbol_boundary(
+        self, graph: KnowledgeGraph
+    ) -> None:
+        # src/auth.py has validate at lines 1-10.
+        # A TypeRef at line 50 falls outside that boundary.
+        outside_data = [
+            FileParseData(
+                file_path="src/auth.py",
+                language="python",
+                parse_result=ParseResult(
+                    type_refs=[
+                        TypeRef(name="User", kind="param", line=50, param_name="u"),
+                    ],
+                ),
+            ),
+        ]
+
+        process_types(outside_data, graph)
+
+        uses_rels = graph.get_relationships_by_type(RelType.USES_TYPE)
+        assert len(uses_rels) == 0

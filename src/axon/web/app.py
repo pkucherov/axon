@@ -69,8 +69,8 @@ def create_app(
         CORSMiddleware,
         allow_origin_regex=r"https?://localhost(:\d+)?",
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type", "Accept"],
     )
 
     from axon.web.routes.analysis import router as analysis_router

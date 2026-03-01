@@ -119,6 +119,14 @@ class TestCalculateCoupling:
         # 6 / max(8, 8) = 6 / 8 = 0.75
         assert strength == pytest.approx(0.75)
 
+    def test_calculate_coupling_zero_total_changes(self) -> None:
+        """When both files have 0 total changes, coupling is 0 (no division by zero)."""
+        total_changes = {"src/auth.py": 0, "src/models.py": 0}
+        strength = calculate_coupling(
+            "src/auth.py", "src/models.py", co_changes=0, total_changes=total_changes
+        )
+        assert strength == 0.0
+
 
 # ---------------------------------------------------------------------------
 # process_coupling tests
@@ -149,6 +157,7 @@ class TestProcessCoupling:
             Path("/fake/repo"),
             min_strength=0.3,
             commits=commits,
+            min_cochanges=1,
         )
 
         # auth+models: coupling = 4 / max(5, 5) = 0.8 >= 0.3 -> created

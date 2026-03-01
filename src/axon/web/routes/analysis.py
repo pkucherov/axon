@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import threading
 from collections import defaultdict
@@ -17,9 +18,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["analysis"])
 
+# Guards against concurrent reindex runs launched via POST /reindex.
+_reindex_lock = threading.Lock()
+
 
 @router.get("/impact/{node_id:path}")
-def get_impact(node_id: str, request: Request, depth: int = Query(default=3, ge=1, le=10)) -> dict:
+def get_impact(node_id: str, request: Request, depth: int = Query(default=3, ge=1, le=5)) -> dict:
     """Analyse the blast radius of a node by traversing callers up to *depth* hops."""
     storage = request.app.state.storage
 
@@ -149,13 +153,18 @@ def get_health(request: Request) -> dict:
     # Dead code score (25%): 100 - (dead / total * 100)
     try:
         dc_rows = storage.execute_raw(
-            "MATCH (n) WHERE n.start_line > 0 AND label(n) IN ['Function','Method','Class'] "
+            "MATCH (n:Function) WHERE n.start_line > 0 "
+            "RETURN count(n), sum(CASE WHEN n.is_dead = true THEN 1 ELSE 0 END) "
+            "UNION ALL MATCH (n:Method) WHERE n.start_line > 0 "
+            "RETURN count(n), sum(CASE WHEN n.is_dead = true THEN 1 ELSE 0 END) "
+            "UNION ALL MATCH (n:Class) WHERE n.start_line > 0 "
             "RETURN count(n), sum(CASE WHEN n.is_dead = true THEN 1 ELSE 0 END)"
         )
-        total_symbols = dc_rows[0][0] if dc_rows and dc_rows[0] and dc_rows[0][0] else 1
-        dead_count = dc_rows[0][1] if dc_rows and dc_rows[0] and dc_rows[0][1] else 0
+        total_symbols = sum(r[0] for r in dc_rows if r and r[0]) or 1
+        dead_count = sum(r[1] for r in dc_rows if r and r[1]) or 0
         breakdown["deadCode"] = round(max(0.0, 100.0 - (dead_count / max(total_symbols, 1) * 100)), 1)
     except Exception:
+        logger.warning("Health: dead code query failed", exc_info=True)
         breakdown["deadCode"] = 100.0
 
     # Coupling score (20%): 100 - (high_coupling / total_coupling * 200)
@@ -173,6 +182,7 @@ def get_health(request: Request) -> dict:
         else:
             breakdown["coupling"] = 100.0
     except Exception:
+        logger.warning("Health: coupling query failed", exc_info=True)
         breakdown["coupling"] = 100.0
 
     # Modularity score (20%): community count as proxy
@@ -190,6 +200,7 @@ def get_health(request: Request) -> dict:
             # Diminishing returns above 15
             breakdown["modularity"] = round(max(50.0, 100.0 - (comm_count - 15) * 2), 1)
     except Exception:
+        logger.warning("Health: modularity query failed", exc_info=True)
         breakdown["modularity"] = 50.0
 
     # Confidence score (20%): avg(confidence) * 100 across CALLS edges
@@ -200,21 +211,26 @@ def get_health(request: Request) -> dict:
         avg_conf = conf_rows[0][0] if conf_rows and conf_rows[0] and conf_rows[0][0] is not None else 0.8
         breakdown["confidence"] = round(min(100.0, avg_conf * 100), 1)
     except Exception:
+        logger.warning("Health: confidence query failed", exc_info=True)
         breakdown["confidence"] = 80.0
 
     # Coverage score (15%): symbols_in_processes / callable_symbols * 100
     try:
         cov_rows = storage.execute_raw(
-            "MATCH (n) WHERE label(n) IN ['Function','Method'] "
+            "MATCH (n:Function) "
+            "OPTIONAL MATCH (n)-[r:CodeRelation]->() WHERE r.rel_type = 'step_in_process' "
+            "RETURN count(n), count(DISTINCT CASE WHEN r IS NOT NULL THEN n.id END) "
+            "UNION ALL MATCH (n:Method) "
             "OPTIONAL MATCH (n)-[r:CodeRelation]->() WHERE r.rel_type = 'step_in_process' "
             "RETURN count(n), count(DISTINCT CASE WHEN r IS NOT NULL THEN n.id END)"
         )
-        callable_count = cov_rows[0][0] if cov_rows and cov_rows[0] and cov_rows[0][0] else 1
-        in_process = cov_rows[0][1] if cov_rows and cov_rows[0] and cov_rows[0][1] else 0
+        callable_count = sum(r[0] for r in cov_rows if r and r[0]) or 1
+        in_process = sum(r[1] for r in cov_rows if r and r[1]) or 0
         breakdown["coverage"] = round(
             min(100.0, in_process / max(callable_count, 1) * 100), 1
         )
     except Exception:
+        logger.warning("Health: coverage query failed", exc_info=True)
         breakdown["coverage"] = 0.0
 
     # Weighted composite
@@ -231,7 +247,7 @@ def get_health(request: Request) -> dict:
 
 
 @router.post("/reindex")
-def trigger_reindex(request: Request) -> dict:
+async def trigger_reindex(request: Request) -> dict:
     """Trigger a full reindex in a background thread.
 
     Only available when the app is started in watch mode (storage is read-write).
@@ -244,28 +260,32 @@ def trigger_reindex(request: Request) -> dict:
         raise HTTPException(status_code=400, detail="Reindex only available in watch mode")
 
     event_listeners = request.app.state.event_listeners
+    loop = asyncio.get_running_loop()
 
     def _broadcast(event: dict) -> None:
-        """Put an event into every connected client's queue."""
+        """Put an event into every connected client's queue (thread-safe)."""
         if not event_listeners:
             return
         for q in list(event_listeners):
             try:
-                q.put_nowait(event)
+                loop.call_soon_threadsafe(q.put_nowait, event)
             except Exception:
                 pass
 
-    def _run_reindex() -> None:
-        _broadcast({"type": "reindex_start", "data": {}})
+    if not _reindex_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Reindex already in progress")
 
+    def _run_reindex() -> None:
         try:
+            _broadcast({"type": "reindex_start", "data": {}})
             storage = request.app.state.storage
             run_pipeline(repo_path, storage=storage, full=True)
             logger.info("Reindex completed for %s", repo_path)
         except Exception:
             logger.error("Reindex failed", exc_info=True)
-
-        _broadcast({"type": "reindex_complete", "data": {}})
+        finally:
+            _reindex_lock.release()
+            _broadcast({"type": "reindex_complete", "data": {}})
 
     thread = threading.Thread(target=_run_reindex, daemon=True)
     thread.start()

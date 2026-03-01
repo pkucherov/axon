@@ -18,7 +18,7 @@ router = APIRouter(tags=["search"])
 class SearchRequest(BaseModel):
     """Body for the POST /search endpoint."""
 
-    query: str
+    query: str = Field(min_length=1, max_length=1000)
     limit: int = Field(default=20, ge=1, le=200)
 
 
@@ -28,6 +28,8 @@ def search(body: SearchRequest, request: Request) -> dict:
     storage = request.app.state.storage
 
     query_embedding = embed_query(body.query)
+    if query_embedding is None:
+        logger.warning("Embedding failed for query %r; falling back to FTS-only", body.query)
 
     try:
         results = hybrid_search(

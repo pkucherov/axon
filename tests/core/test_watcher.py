@@ -13,7 +13,6 @@ from axon.core.ingestion.watcher import (
     _get_head_sha,
     _compute_dirty_node_ids,
     _run_incremental_global_phases,
-    QUIET_PERIOD,
 )
 from axon.core.graph.model import NodeLabel
 from axon.core.ingestion.walker import FileEntry, read_file
@@ -251,8 +250,8 @@ class TestWatcherReindexFiles:
 
         count, _paths = _reindex_files([deleted_path], tmp_repo, storage)
 
-        # Returns 0 because file no longer exists (was handled as deletion).
-        assert count == 0
+        # Returns 1: the deleted file was processed (nodes removed from storage).
+        assert count == 1
 
     def test_handles_multiple_files(
         self, tmp_repo: Path, storage: KuzuBackend

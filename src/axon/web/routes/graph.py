@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 
 from axon.core.graph.model import GraphNode, GraphRelationship
 
@@ -45,8 +45,12 @@ def _serialize_edge(rel: GraphRelationship) -> dict:
 
 
 @router.get("/graph")
-def get_graph(request: Request) -> dict:
-    """Load the full knowledge graph and serialize all nodes and edges."""
+def get_graph(
+    request: Request,
+    limit: int = Query(default=500, ge=1, le=5000),
+    offset: int = Query(default=0, ge=0),
+) -> dict:
+    """Load the full knowledge graph and serialize nodes and edges with pagination."""
     storage = request.app.state.storage
     try:
         graph = storage.load_graph()
@@ -54,15 +58,20 @@ def get_graph(request: Request) -> dict:
         logger.error("Failed to load graph: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load graph") from exc
 
-    nodes = [_serialize_node(n) for n in graph.iter_nodes()]
-    edges = [_serialize_edge(r) for r in graph.iter_relationships()]
+    all_nodes = [_serialize_node(n) for n in graph.iter_nodes()]
+    all_edges = [_serialize_edge(r) for r in graph.iter_relationships()]
 
-    return {"nodes": nodes, "edges": edges}
+    nodes = all_nodes[offset : offset + limit]
+
+    return {"nodes": nodes, "edges": all_edges, "total": len(all_nodes)}
 
 
 @router.get("/node/{node_id:path}")
 def get_node(node_id: str, request: Request) -> dict:
     """Get a single node with its callers, callees, type refs, and process memberships."""
+    if len(node_id) > 500:
+        raise HTTPException(status_code=400, detail="Node ID too long")
+
     storage = request.app.state.storage
 
     node = storage.get_node(node_id)

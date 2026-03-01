@@ -39,7 +39,9 @@ def sample_repo(tmp_path: Path) -> Path:
             +-- handler.ts      exported handler function, calls process
             +-- process.ts      process function
     """
-    src = tmp_path / "src"
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    src = repo / "src"
     src.mkdir()
 
     (src / "models.py").write_text(
@@ -86,7 +88,7 @@ def sample_repo(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
 
-    lib = tmp_path / "lib"
+    lib = repo / "lib"
     lib.mkdir()
 
     (lib / "handler.ts").write_text(
@@ -105,7 +107,7 @@ def sample_repo(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
 
-    return tmp_path
+    return repo
 
 
 @pytest.fixture()
@@ -337,9 +339,15 @@ class TestIdempotency:
         self, sample_repo: Path, storage: KuzuBackend
     ) -> None:
         _, result1 = run_pipeline(sample_repo, storage)
+        fn_count_after_run1 = storage.execute_raw("MATCH (n:Function) RETURN count(n)")[0][0]
+
         _, result2 = run_pipeline(sample_repo, storage)
+        fn_count_after_run2 = storage.execute_raw("MATCH (n:Function) RETURN count(n)")[0][0]
 
         assert result1.files == result2.files
         assert result1.symbols == result2.symbols
         assert result1.relationships == result2.relationships
         assert result1.dead_code == result2.dead_code
+
+        # DB-level check: running the pipeline twice must not duplicate Function nodes.
+        assert fn_count_after_run2 == fn_count_after_run1

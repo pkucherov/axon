@@ -156,9 +156,11 @@ def get_file(
     if repo_path is None:
         raise HTTPException(status_code=400, detail="No repo_path configured")
 
-    # Prevent path traversal
-    resolved = (Path(repo_path) / path).resolve()
-    if not str(resolved).startswith(str(Path(repo_path).resolve())):
+    # Prevent path traversal — is_relative_to avoids the shared-prefix bypass
+    # (e.g. /repo vs /repo-evil) that startswith() is vulnerable to.
+    repo_root = Path(repo_path).resolve()
+    resolved = (repo_root / path).resolve()
+    if not resolved.is_relative_to(repo_root):
         raise HTTPException(status_code=400, detail="Path traversal not allowed")
 
     if not resolved.is_file():

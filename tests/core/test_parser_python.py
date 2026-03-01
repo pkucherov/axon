@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from axon.core.parsers.base import ParseResult
 from axon.core.parsers.python_lang import PythonParser
 
 
@@ -326,7 +327,7 @@ class TestEdgeCases:
         code = "def broken(\n"
         # Should not raise; tree-sitter produces a partial tree.
         result = parser.parse(code, "broken.py")
-        assert isinstance(result, type(result))
+        assert isinstance(result, ParseResult)
 
     def test_nested_function(self, parser: PythonParser) -> None:
         code = (

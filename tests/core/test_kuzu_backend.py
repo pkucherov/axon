@@ -312,6 +312,18 @@ class TestTraverse:
         nodes = backend.traverse(caller_id, depth=0, direction="callees")
         assert nodes == []
 
+    def test_traverse_callers(self, backend: KuzuBackend) -> None:
+        """traverse(B, depth=1, direction='callers') returns [A] when A -> B."""
+        graph = _build_small_graph()
+        backend.bulk_load(graph)
+
+        # callee is the target; traverse callers should return the caller.
+        callee_id = generate_id(NodeLabel.FUNCTION, "src/a.py", "callee")
+        nodes = backend.traverse(callee_id, depth=1, direction="callers")
+
+        assert len(nodes) == 1
+        assert nodes[0].name == "caller"
+
 
 # ---------------------------------------------------------------------------
 # add_nodes with different labels
