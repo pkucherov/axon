@@ -9,6 +9,7 @@ from collections import defaultdict
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from axon.core.ingestion.pipeline import run_pipeline
+from axon.mcp.resources import get_dead_code_symbols
 
 from axon.web.routes.graph import _serialize_node
 
@@ -45,11 +46,7 @@ def get_dead_code(request: Request) -> dict:
     storage = request.app.state.storage
 
     try:
-        rows = storage.execute_raw(
-            "MATCH (n) WHERE n.is_dead = true "
-            "RETURN n.id, n.name, n.file_path, n.start_line, label(n) "
-            "ORDER BY n.file_path"
-        )
+        rows = get_dead_code_symbols(storage)
     except Exception as exc:
         logger.error("Dead code query failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Dead code query failed") from exc
@@ -151,18 +148,12 @@ def get_health(request: Request) -> dict:
 
     # Dead code score (25%): 100 - (dead / total * 100)
     try:
-        total_rows = storage.execute_raw(
-            "MATCH (n:Function) WHERE n.start_line > 0 RETURN count(n) "
-            "UNION ALL MATCH (n:Method) WHERE n.start_line > 0 RETURN count(n) "
-            "UNION ALL MATCH (n:Class) WHERE n.start_line > 0 RETURN count(n)"
+        dc_rows = storage.execute_raw(
+            "MATCH (n) WHERE n.start_line > 0 AND label(n) IN ['Function','Method','Class'] "
+            "RETURN count(n), sum(CASE WHEN n.is_dead = true THEN 1 ELSE 0 END)"
         )
-        dead_rows = storage.execute_raw(
-            "MATCH (n:Function) WHERE n.is_dead = true RETURN count(n) "
-            "UNION ALL MATCH (n:Method) WHERE n.is_dead = true RETURN count(n) "
-            "UNION ALL MATCH (n:Class) WHERE n.is_dead = true RETURN count(n)"
-        )
-        total_symbols = sum(r[0] for r in total_rows if r and r[0]) if total_rows else 1
-        dead_count = sum(r[0] for r in dead_rows if r and r[0]) if dead_rows else 0
+        total_symbols = dc_rows[0][0] if dc_rows and dc_rows[0] and dc_rows[0][0] else 1
+        dead_count = dc_rows[0][1] if dc_rows and dc_rows[0] and dc_rows[0][1] else 0
         breakdown["deadCode"] = round(max(0.0, 100.0 - (dead_count / max(total_symbols, 1) * 100)), 1)
     except Exception:
         breakdown["deadCode"] = 100.0
@@ -213,16 +204,13 @@ def get_health(request: Request) -> dict:
 
     # Coverage score (15%): symbols_in_processes / callable_symbols * 100
     try:
-        callable_rows = storage.execute_raw(
-            "MATCH (n:Function) RETURN count(n) "
-            "UNION ALL MATCH (n:Method) RETURN count(n)"
+        cov_rows = storage.execute_raw(
+            "MATCH (n) WHERE label(n) IN ['Function','Method'] "
+            "OPTIONAL MATCH (n)-[r:CodeRelation]->() WHERE r.rel_type = 'step_in_process' "
+            "RETURN count(n), count(DISTINCT CASE WHEN r IS NOT NULL THEN n.id END)"
         )
-        process_member_rows = storage.execute_raw(
-            "MATCH (n)-[r:CodeRelation]->() WHERE r.rel_type = 'step_in_process' "
-            "RETURN count(DISTINCT n.id)"
-        )
-        callable_count = sum(r[0] for r in callable_rows if r and r[0]) if callable_rows else 1
-        in_process = process_member_rows[0][0] if process_member_rows and process_member_rows[0] else 0
+        callable_count = cov_rows[0][0] if cov_rows and cov_rows[0] and cov_rows[0][0] else 1
+        in_process = cov_rows[0][1] if cov_rows and cov_rows[0] and cov_rows[0][1] else 0
         breakdown["coverage"] = round(
             min(100.0, in_process / max(callable_count, 1) * 100), 1
         )
@@ -255,15 +243,20 @@ def trigger_reindex(request: Request) -> dict:
     if not request.app.state.watch:
         raise HTTPException(status_code=400, detail="Reindex only available in watch mode")
 
-    event_queue = request.app.state.event_queue
+    event_listeners = request.app.state.event_listeners
 
-    def _run_reindex() -> None:
-
-        if event_queue:
+    def _broadcast(event: dict) -> None:
+        """Put an event into every connected client's queue."""
+        if not event_listeners:
+            return
+        for q in list(event_listeners):
             try:
-                event_queue.put_nowait({"type": "reindex_start", "data": {}})
+                q.put_nowait(event)
             except Exception:
                 pass
+
+    def _run_reindex() -> None:
+        _broadcast({"type": "reindex_start", "data": {}})
 
         try:
             storage = request.app.state.storage
@@ -272,11 +265,7 @@ def trigger_reindex(request: Request) -> dict:
         except Exception:
             logger.error("Reindex failed", exc_info=True)
 
-        if event_queue:
-            try:
-                event_queue.put_nowait({"type": "reindex_complete", "data": {}})
-            except Exception:
-                pass
+        _broadcast({"type": "reindex_complete", "data": {}})
 
     thread = threading.Thread(target=_run_reindex, daemon=True)
     thread.start()

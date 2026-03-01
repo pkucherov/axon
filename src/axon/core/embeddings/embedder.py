@@ -42,6 +42,18 @@ EMBEDDABLE_LABELS: frozenset[NodeLabel] = frozenset(
     }
 )
 
+_DEFAULT_MODEL = "BAAI/bge-small-en-v1.5"
+
+
+def embed_query(query: str, model_name: str = _DEFAULT_MODEL) -> list[float] | None:
+    """Embed a single query string, returning ``None`` on failure."""
+    try:
+        model = _get_model(model_name)
+        return list(next(iter(model.embed([query]))))
+    except Exception:
+        return None
+
+
 def embed_graph(
     graph: KnowledgeGraph,
     model_name: str = "BAAI/bge-small-en-v1.5",

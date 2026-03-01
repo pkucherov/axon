@@ -9,14 +9,11 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
+from axon.core.cypher_guard import WRITE_KEYWORDS
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["cypher"])
-
-_WRITE_KEYWORDS = re.compile(
-    r"\b(DELETE|DROP|CREATE|SET|REMOVE|MERGE|DETACH|INSTALL|LOAD|COPY|CALL)\b",
-    re.IGNORECASE,
-)
 
 
 class CypherRequest(BaseModel):
@@ -54,7 +51,7 @@ def execute_cypher(body: CypherRequest, request: Request) -> dict:
     """Execute a read-only Cypher query and return structured results."""
     storage = request.app.state.storage
 
-    if _WRITE_KEYWORDS.search(body.query):
+    if WRITE_KEYWORDS.search(body.query):
         raise HTTPException(
             status_code=400,
             detail=(

@@ -52,9 +52,15 @@ function ProcessEntry({
 
   const Chevron = expanded ? ChevronDown : ChevronRight;
 
-  const stepNodeIds = process.steps
-    .sort((a, b) => a.stepNumber - b.stepNumber)
-    .map((s) => s.nodeId);
+  const sortedSteps = useMemo(
+    () => [...process.steps].sort((a, b) => a.stepNumber - b.stepNumber),
+    [process.steps],
+  );
+
+  const stepNodeIds = useMemo(
+    () => sortedSteps.map((s) => s.nodeId),
+    [sortedSteps],
+  );
 
   const handleTrace = useCallback(
     (e: React.MouseEvent) => {
@@ -152,19 +158,17 @@ function ProcessEntry({
 
       {expanded && (
         <div style={{ paddingLeft: 16, paddingBottom: 4 }}>
-          {process.steps
-            .sort((a, b) => a.stepNumber - b.stepNumber)
-            .map((step) => {
-              const nodeInfo = allNodes.get(step.nodeId);
-              return (
-                <StepRow
-                  key={step.nodeId + '-' + step.stepNumber}
-                  stepNumber={step.stepNumber}
-                  nodeId={step.nodeId}
-                  nodeInfo={nodeInfo}
-                />
-              );
-            })}
+          {sortedSteps.map((step) => {
+            const nodeInfo = allNodes.get(step.nodeId);
+            return (
+              <StepRow
+                key={step.nodeId + '-' + step.stepNumber}
+                stepNumber={step.stepNumber}
+                nodeId={step.nodeId}
+                nodeInfo={nodeInfo}
+              />
+            );
+          })}
         </div>
       )}
     </div>

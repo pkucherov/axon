@@ -1,8 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { fileApi, graphApi } from '@/api/client';
+import { fileApi } from '@/api/client';
 import { useDataStore } from '@/stores/dataStore';
+import { useGraphStore } from '@/stores/graphStore';
 import { codeToHtml } from 'shiki';
-import type { NodeContext } from '@/types';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 
 // ---------------------------------------------------------------------------
@@ -28,24 +28,23 @@ export function CodeTab({ nodeId }: CodeTabProps) {
   const loading = useDataStore((s) => s.loading);
   const setLoading = useDataStore((s) => s.setLoading);
 
+  // Read node metadata directly from the graph store (already loaded)
+  const selectedNode = useGraphStore((s) => s.nodes.find((n) => n.id === nodeId));
+  const nodeStartLine = selectedNode?.startLine ?? 0;
+  const nodeEndLine = selectedNode?.endLine ?? 0;
+
   const [error, setError] = useState<string | null>(null);
   const [highlightedHtml, setHighlightedHtml] = useState<string>('');
-  const [nodeStartLine, setNodeStartLine] = useState<number>(0);
-  const [nodeEndLine, setNodeEndLine] = useState<number>(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Fetch node context to get filePath and line range
+  // Fetch file content using filePath from the graph store
   const fetchCode = useCallback(
-    async (id: string) => {
+    async (filePath: string | undefined) => {
+      if (!filePath) return;
       setLoading('code', true);
       setError(null);
       try {
-        const ctx: NodeContext = await graphApi.getNode(id);
-        const node = ctx.node;
-        setNodeStartLine(node.startLine);
-        setNodeEndLine(node.endLine);
-
-        const file = await fileApi.getFile(node.filePath);
+        const file = await fileApi.getFile(filePath);
         setFileContent(file);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load file');
@@ -58,8 +57,8 @@ export function CodeTab({ nodeId }: CodeTabProps) {
   );
 
   useEffect(() => {
-    void fetchCode(nodeId);
-  }, [nodeId, fetchCode]);
+    void fetchCode(selectedNode?.filePath);
+  }, [nodeId, selectedNode?.filePath, fetchCode]);
 
   // Highlight with Shiki
   useEffect(() => {

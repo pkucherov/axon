@@ -19,6 +19,17 @@ export function InheritanceTree() {
 
   const roots = useMemo(() => buildForest(nodes, edges), [nodes, edges]);
 
+  // Build method count map once for all tree nodes
+  const methodCounts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const n of nodes) {
+      if (n.label === 'method' && n.className) {
+        map.set(n.className, (map.get(n.className) ?? 0) + 1);
+      }
+    }
+    return map;
+  }, [nodes]);
+
   if (roots.length === 0) {
     return (
       <div
@@ -38,22 +49,17 @@ export function InheritanceTree() {
   return (
     <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
       {roots.map((root) => (
-        <TreeNodeRow key={root.id} node={root} depth={0} />
+        <TreeNodeRow key={root.id} node={root} depth={0} methodCounts={methodCounts} />
       ))}
     </div>
   );
 }
 
-function TreeNodeRow({ node, depth }: { node: TreeNode; depth: number }) {
+function TreeNodeRow({ node, depth, methodCounts }: { node: TreeNode; depth: number; methodCounts: Map<string, number> }) {
   const [expanded, setExpanded] = useState(true);
   const hasChildren = node.children.length > 0;
 
-  // Count methods: nodes that reference this class in their className
-  const graphNodes = useGraphStore((s) => s.nodes);
-  const methodCount = useMemo(
-    () => graphNodes.filter((n) => n.className === node.name && n.label === 'method').length,
-    [graphNodes, node.name],
-  );
+  const methodCount = methodCounts.get(node.name) ?? 0;
 
   const isInterface = node.isInterface;
   const isDashed = node.edgeType === 'implements';
@@ -155,7 +161,7 @@ function TreeNodeRow({ node, depth }: { node: TreeNode; depth: number }) {
       {/* Children */}
       {expanded &&
         node.children.map((child) => (
-          <TreeNodeRow key={child.id} node={child} depth={depth + 1} />
+          <TreeNodeRow key={child.id} node={child} depth={depth + 1} methodCounts={methodCounts} />
         ))}
     </div>
   );

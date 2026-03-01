@@ -32,15 +32,10 @@ export function CouplingHeatmap({ pairs }: CouplingHeatmapProps) {
     y: 0,
     text: '',
   });
-  const [truncated, setTruncated] = useState(false);
-
   // Build matrix data
-  const { files, matrix, pairMap } = useMemo(() => buildMatrix(pairs), [pairs]);
+  const { files, matrix, pairMap, totalUniqueFiles } = useMemo(() => buildMatrix(pairs), [pairs]);
 
-  // Track truncation
-  useEffect(() => {
-    setTruncated(files.length < getUniqueFiles(pairs).length);
-  }, [files.length, pairs]);
+  const truncated = files.length < totalUniqueFiles;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -222,7 +217,7 @@ export function CouplingHeatmap({ pairs }: CouplingHeatmapProps) {
             marginBottom: 4,
           }}
         >
-          Showing top 50 of {getUniqueFiles(pairs).length} files
+          Showing top 50 of {totalUniqueFiles} files
         </div>
       )}
       <canvas
@@ -277,13 +272,15 @@ function buildMatrix(pairs: CouplingPair[]): {
   files: string[];
   matrix: number[][];
   pairMap: Map<string, CouplingPair>;
+  totalUniqueFiles: number;
 } {
   if (pairs.length === 0) {
-    return { files: [], matrix: [], pairMap: new Map() };
+    return { files: [], matrix: [], pairMap: new Map(), totalUniqueFiles: 0 };
   }
 
   // Collect unique files
   let allFiles = getUniqueFiles(pairs);
+  const totalUniqueFiles = allFiles.length;
 
   // If >50 files, pick top 50 by max coupling strength
   if (allFiles.length > 50) {
@@ -324,5 +321,5 @@ function buildMatrix(pairs: CouplingPair[]): {
     }
   }
 
-  return { files: allFiles, matrix, pairMap };
+  return { files: allFiles, matrix, pairMap, totalUniqueFiles };
 }

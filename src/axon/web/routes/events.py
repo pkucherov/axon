@@ -15,30 +15,36 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["events"])
 
 
-async def _event_generator(queue: asyncio.Queue | None) -> AsyncIterator[dict]:
-    """Yield SSE-formatted events from the event queue.
+async def _event_generator(listeners: list[asyncio.Queue] | None) -> AsyncIterator[dict]:
+    """Yield SSE-formatted events from a per-client queue.
 
-    If queue is None (non-watch mode), the generator yields nothing and exits.
+    Registers a private queue on connect, removes it on disconnect, so that
+    every connected client receives every event (fan-out).
     """
-    if queue is None:
+    if listeners is None:
         return
 
-    while True:
-        try:
-            event = await asyncio.wait_for(queue.get(), timeout=30.0)
-            yield {
-                "event": event.get("type", "message"),
-                "data": json.dumps(event.get("data", {})),
-            }
-        except asyncio.TimeoutError:
-            # Send keepalive comment to prevent connection timeout
-            yield {"comment": "keepalive"}
-        except asyncio.CancelledError:
-            break
+    queue: asyncio.Queue = asyncio.Queue()
+    listeners.append(queue)
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                yield {
+                    "event": event.get("type", "message"),
+                    "data": json.dumps(event.get("data", {})),
+                }
+            except asyncio.TimeoutError:
+                # Send keepalive comment to prevent connection timeout
+                yield {"comment": "keepalive"}
+            except asyncio.CancelledError:
+                break
+    finally:
+        listeners.remove(queue)
 
 
 @router.get("/events")
 async def event_stream(request: Request):
     """SSE endpoint for real-time events (reindex_start, reindex_complete, file_changed)."""
-    event_queue = request.app.state.event_queue
-    return EventSourceResponse(_event_generator(event_queue))
+    listeners = request.app.state.event_listeners
+    return EventSourceResponse(_event_generator(listeners))

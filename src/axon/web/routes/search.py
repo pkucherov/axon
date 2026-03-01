@@ -7,14 +7,12 @@ import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from axon.core.embeddings.embedder import _get_model
+from axon.core.embeddings.embedder import embed_query
 from axon.core.search.hybrid import hybrid_search
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["search"])
-
-_EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
 
 
 class SearchRequest(BaseModel):
@@ -29,12 +27,7 @@ def search(body: SearchRequest, request: Request) -> dict:
     """Run hybrid search (FTS + optional vector) and return results."""
     storage = request.app.state.storage
 
-    query_embedding: list[float] | None = None
-    try:
-        model = _get_model(_EMBED_MODEL_NAME)
-        query_embedding = list(next(iter(model.embed([body.query]))))
-    except Exception:
-        logger.debug("Query embedding failed, falling back to FTS only", exc_info=True)
+    query_embedding = embed_query(body.query)
 
     try:
         results = hybrid_search(

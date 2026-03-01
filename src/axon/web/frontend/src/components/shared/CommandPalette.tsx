@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Command } from 'cmdk';
 import { useViewStore } from '@/stores/viewStore';
+import type { ActiveView, LeftTab } from '@/stores/viewStore';
 import { useGraphStore } from '@/stores/graphStore';
 import { actionApi } from '@/api/client';
 import { useSearch } from '@/hooks/useSearch';
@@ -17,32 +18,15 @@ interface PaletteCommand {
 }
 
 function useCommands(): PaletteCommand[] {
+  const leftTab = (tab: LeftTab) => () => useViewStore.getState().setLeftTab(tab);
+  const view = (v: ActiveView) => () => useViewStore.getState().setActiveView(v);
+
   return [
-    {
-      name: 'dead-code',
-      description: 'Open Dead Code tab',
-      action: () => useViewStore.getState().setLeftTab('dead-code'),
-    },
-    {
-      name: 'communities',
-      description: 'Open Communities tab',
-      action: () => useViewStore.getState().setLeftTab('communities'),
-    },
-    {
-      name: 'cypher',
-      description: 'Switch to Cypher view',
-      action: () => useViewStore.getState().setActiveView('cypher'),
-    },
-    {
-      name: 'analysis',
-      description: 'Switch to Analysis view',
-      action: () => useViewStore.getState().setActiveView('analysis'),
-    },
-    {
-      name: 'explorer',
-      description: 'Switch to Explorer view',
-      action: () => useViewStore.getState().setActiveView('explorer'),
-    },
+    { name: 'dead-code', description: 'Open Dead Code tab', action: leftTab('dead-code') },
+    { name: 'communities', description: 'Open Communities tab', action: leftTab('communities') },
+    { name: 'cypher', description: 'Switch to Cypher view', action: view('cypher') },
+    { name: 'analysis', description: 'Switch to Analysis view', action: view('analysis') },
+    { name: 'explorer', description: 'Switch to Explorer view', action: view('explorer') },
     {
       name: 'reindex',
       description: 'Trigger reindex',

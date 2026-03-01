@@ -50,7 +50,7 @@ def _make_app(
     app = FastAPI()
     app.state.storage = storage
     app.state.repo_path = repo_path
-    app.state.event_queue = None
+    app.state.event_listeners = None
     app.state.watch = watch
 
     app.include_router(graph_router)
@@ -331,7 +331,7 @@ class TestSearchEndpoint:
         ]
 
         with patch("axon.web.routes.search.hybrid_search", return_value=search_results):
-            with patch("axon.web.routes.search._get_model", side_effect=ImportError):
+            with patch("axon.web.routes.search.embed_query", return_value=None):
                 response = client.post(
                     "/search", json={"query": "validate", "limit": 10}
                 )
@@ -353,7 +353,7 @@ class TestSearchEndpoint:
         self, mock_storage: MagicMock, client: TestClient
     ) -> None:
         with patch("axon.web.routes.search.hybrid_search", return_value=[]):
-            with patch("axon.web.routes.search._get_model", side_effect=ImportError):
+            with patch("axon.web.routes.search.embed_query", return_value=None):
                 response = client.post(
                     "/search", json={"query": "nonexistent", "limit": 5}
                 )
@@ -369,7 +369,7 @@ class TestSearchEndpoint:
             "axon.web.routes.search.hybrid_search",
             side_effect=RuntimeError("search error"),
         ):
-            with patch("axon.web.routes.search._get_model", side_effect=ImportError):
+            with patch("axon.web.routes.search.embed_query", return_value=None):
                 response = client.post(
                     "/search", json={"query": "test"}
                 )

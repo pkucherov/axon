@@ -3,18 +3,19 @@
  *
  * Opens an EventSource connection to `/api/events` and listens for reindex
  * lifecycle events.  When a `reindex_complete` event fires, the hook fetches
- * fresh graph data from the API and pushes it into the Zustand store, causing
- * the Sigma canvas to re-render with updated data.
+ * fresh graph data *and* analysis data from the API and pushes them into the
+ * Zustand stores, causing the UI to re-render with updated data.
  *
  * Reconnects automatically after a 5-second delay on connection errors.
  */
 
 import { useEffect, useRef } from 'react';
-import { graphApi } from '@/api/client';
+import { analysisApi, graphApi } from '@/api/client';
 import { useGraphStore } from '@/stores/graphStore';
+import { useDataStore } from '@/stores/dataStore';
 
 /**
- * Subscribe to backend SSE events and auto-refresh graph data on reindex.
+ * Subscribe to backend SSE events and auto-refresh all data on reindex.
  *
  * Should be called once at the application root (e.g. inside `<App />`).
  */
@@ -22,6 +23,10 @@ export function useSSE(): void {
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const setGraphData = useGraphStore((s) => s.setGraphData);
+  const setOverview = useGraphStore((s) => s.setOverview);
+  const setCommunities = useGraphStore((s) => s.setCommunities);
+  const setDeadCode = useDataStore((s) => s.setDeadCode);
+  const setHealthScore = useDataStore((s) => s.setHealthScore);
 
   useEffect(() => {
     function connect(): void {
@@ -29,13 +34,23 @@ export function useSSE(): void {
       sourceRef.current = source;
 
       source.addEventListener('reindex_complete', () => {
-        graphApi
-          .getGraph()
-          .then((graphData) => {
+        // Refresh all data in parallel — same set as useGraph's initial load
+        Promise.all([
+          graphApi.getGraph(),
+          graphApi.getOverview().catch(() => null),
+          analysisApi.getCommunities().catch(() => null),
+          analysisApi.getDeadCode().catch(() => null),
+          analysisApi.getHealth().catch(() => null),
+        ])
+          .then(([graphData, overview, commResp, deadResp, healthResp]) => {
             setGraphData(graphData.nodes, graphData.edges);
+            if (overview) setOverview(overview);
+            if (commResp) setCommunities(commResp.communities);
+            if (deadResp) setDeadCode(deadResp);
+            if (healthResp) setHealthScore(healthResp);
           })
           .catch((err: unknown) => {
-            console.error('[SSE] Failed to fetch updated graph:', err);
+            console.error('[SSE] Failed to fetch updated data:', err);
           });
       });
 
@@ -67,5 +82,5 @@ export function useSSE(): void {
         reconnectTimerRef.current = null;
       }
     };
-  }, [setGraphData]);
+  }, [setGraphData, setOverview, setCommunities, setDeadCode, setHealthScore]);
 }

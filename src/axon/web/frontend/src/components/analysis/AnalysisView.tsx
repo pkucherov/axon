@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
-import { analysisApi, graphApi } from '@/api/client';
+import { analysisApi } from '@/api/client';
 import type {
-  HealthScore as HealthScoreType,
-  DeadCodeReport as DeadCodeReportType,
   CouplingPair,
-  Community,
   Process,
-  OverviewStats,
 } from '@/types';
+import { useGraphStore } from '@/stores/graphStore';
+import { useDataStore } from '@/stores/dataStore';
 import { HealthScore } from './HealthScore';
 import { QuickStats } from './QuickStats';
 import { DeadCodeReport } from './DeadCodeReport';
@@ -15,15 +13,6 @@ import { CouplingHeatmap } from './CouplingHeatmap';
 import { InheritanceTree } from './InheritanceTree';
 import { BranchDiff } from './BranchDiff';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
-
-interface DashboardData {
-  health: HealthScoreType | null;
-  deadCode: DeadCodeReportType | null;
-  coupling: CouplingPair[];
-  communities: Community[];
-  processes: Process[];
-  overview: OverviewStats | null;
-}
 
 const CARD_STYLE: React.CSSProperties = {
   background: 'var(--bg-surface)',
@@ -69,14 +58,15 @@ function Card({
 }
 
 export function AnalysisView() {
-  const [data, setData] = useState<DashboardData>({
-    health: null,
-    deadCode: null,
-    coupling: [],
-    communities: [],
-    processes: [],
-    overview: null,
-  });
+  // Read data already loaded by useGraph (avoids duplicate API calls)
+  const overview = useGraphStore((s) => s.overview);
+  const communities = useGraphStore((s) => s.communities);
+  const healthScore = useDataStore((s) => s.healthScore);
+  const deadCode = useDataStore((s) => s.deadCode);
+
+  // Only fetch the two data sets that useGraph doesn't load
+  const [coupling, setCoupling] = useState<CouplingPair[]>([]);
+  const [processes, setProcesses] = useState<Process[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,23 +76,13 @@ export function AnalysisView() {
     setError(null);
 
     Promise.all([
-      analysisApi.getHealth().catch(() => null),
-      analysisApi.getDeadCode().catch(() => null),
       analysisApi.getCoupling().catch(() => ({ pairs: [] as CouplingPair[] })),
-      analysisApi.getCommunities().catch(() => ({ communities: [] as Community[] })),
       analysisApi.getProcesses().catch(() => ({ processes: [] as Process[] })),
-      graphApi.getOverview().catch(() => null),
     ])
-      .then(([health, deadCode, couplingResp, commResp, procResp, overview]) => {
+      .then(([couplingResp, procResp]) => {
         if (cancelled) return;
-        setData({
-          health: health ?? null,
-          deadCode: deadCode ?? null,
-          coupling: couplingResp?.pairs ?? [],
-          communities: commResp?.communities ?? [],
-          processes: procResp?.processes ?? [],
-          overview: overview ?? null,
-        });
+        setCoupling(couplingResp?.pairs ?? []);
+        setProcesses(procResp?.processes ?? []);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(String(err));
@@ -145,26 +125,26 @@ export function AnalysisView() {
       }}
     >
       {/* Row 1 */}
-      <Card title="Health Score" loading={loading}>
-        <HealthScore data={data.health} />
+      <Card title="Health Score">
+        <HealthScore data={healthScore} />
       </Card>
       <Card title="Quick Stats" loading={loading}>
         <QuickStats
-          overview={data.overview}
-          health={data.health}
-          deadCode={data.deadCode}
-          coupling={data.coupling}
-          communities={data.communities}
-          processes={data.processes}
+          overview={overview}
+          health={healthScore}
+          deadCode={deadCode}
+          coupling={coupling}
+          communities={communities}
+          processes={processes}
         />
       </Card>
 
       {/* Row 2 */}
-      <Card title="Dead Code Report" style={{ gridColumn: 'span 1' }} loading={loading}>
-        <DeadCodeReport data={data.deadCode} />
+      <Card title="Dead Code Report" style={{ gridColumn: 'span 1' }}>
+        <DeadCodeReport data={deadCode} />
       </Card>
       <Card title="Coupling Heatmap" style={{ gridColumn: 'span 1' }} loading={loading}>
-        <CouplingHeatmap pairs={data.coupling} />
+        <CouplingHeatmap pairs={coupling} />
       </Card>
 
       {/* Row 3 */}

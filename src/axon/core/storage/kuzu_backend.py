@@ -66,7 +66,7 @@ _REL_PROPERTIES = (
     "symbols STRING"
 )
 
-def _escape(value: str) -> str:
+def escape_cypher(value: str) -> str:
     """Escape a string for safe inclusion in a Cypher literal."""
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
@@ -433,7 +433,7 @@ class KuzuBackend:
         Returns the top *limit* results sorted by score descending.
         """
         assert self._conn is not None
-        escaped_q = _escape(query)
+        escaped_q = escape_cypher(query)
         candidates: list[SearchResult] = []
 
         for table in _SEARCHABLE_TABLES:
@@ -493,7 +493,7 @@ class KuzuBackend:
         score (0 edits = 1.0, *max_distance* edits = 0.3).
         """
         assert self._conn is not None
-        escaped_q = _escape(query.lower())
+        escaped_q = escape_cypher(query.lower())
         candidates: list[SearchResult] = []
 
         for table in _SEARCHABLE_TABLES:

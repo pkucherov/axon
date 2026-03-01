@@ -45,7 +45,7 @@ def create_app(
     read_only = not watch
     storage.initialize(db_path, read_only=read_only)
 
-    event_queue: asyncio.Queue | None = asyncio.Queue() if watch else None
+    event_listeners: list[asyncio.Queue] | None = [] if watch else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -62,7 +62,7 @@ def create_app(
 
     app.state.storage = storage
     app.state.repo_path = repo_path
-    app.state.event_queue = event_queue
+    app.state.event_listeners = event_listeners
     app.state.watch = watch
 
     app.add_middleware(

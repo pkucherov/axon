@@ -291,8 +291,8 @@ class TestHandleDeadCode:
     def test_with_dead_code(self, mock_storage):
         """Returns formatted dead code list (delegates to get_dead_code_list)."""
         mock_storage.execute_raw.return_value = [
-            ["unused_func", "src/old.py", 10],
-            ["DeprecatedModel", "src/models.py", 5],
+            ["function:src/old.py:unused_func", "unused_func", "src/old.py", 10, "Function"],
+            ["class:src/models.py:DeprecatedModel", "DeprecatedModel", "src/models.py", 5, "Class"],
         ]
         result = handle_dead_code(mock_storage)
         assert "Dead Code Report (2 symbols)" in result
@@ -416,7 +416,7 @@ class TestResources:
         from axon.mcp.resources import get_dead_code_list
 
         mock_storage.execute_raw.return_value = [
-            ["old_func", "src/old.py", 10],
+            ["function:src/old.py:old_func", "old_func", "src/old.py", 10, "Function"],
         ]
         result = get_dead_code_list(mock_storage)
         assert "Dead Code Report" in result

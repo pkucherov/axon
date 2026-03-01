@@ -21,10 +21,7 @@ logger = logging.getLogger(__name__)
 MAX_TRAVERSE_DEPTH = 10
 
 
-def _escape_cypher(value: str) -> str:
-    """Escape a string for safe inclusion in a Cypher string literal."""
-    return value.replace("\\", "\\\\").replace("'", "\\'")
-_EMBED_MODEL_NAME = "BAAI/bge-small-en-v1.5"
+from axon.core.storage.kuzu_backend import escape_cypher as _escape_cypher
 
 
 def _confidence_tag(confidence: float) -> str:
@@ -181,14 +178,9 @@ def handle_query(storage: StorageBackend, query: str, limit: int = 20) -> str:
         Formatted search results grouped by process, with file, name, label,
         and snippet for each result.
     """
-    query_embedding: list[float] | None = None
-    try:
-        from axon.core.embeddings.embedder import _get_model
+    from axon.core.embeddings.embedder import embed_query
 
-        model = _get_model(_EMBED_MODEL_NAME)
-        query_embedding = list(next(iter(model.embed([query]))))
-    except Exception:
-        logger.debug("Query embedding failed, falling back to FTS only", exc_info=True)
+    query_embedding = embed_query(query)
 
     results = hybrid_search(query, storage, query_embedding=query_embedding, limit=limit)
     if not results:
@@ -432,10 +424,7 @@ def handle_detect_changes(storage: StorageBackend, diff: str) -> str:
     lines.append("Next: Use impact() on affected symbols to see downstream effects.")
     return "\n".join(lines)
 
-_WRITE_KEYWORDS = re.compile(
-    r"\b(DELETE|DROP|CREATE|SET|REMOVE|MERGE|DETACH|INSTALL|LOAD|COPY|CALL)\b",
-    re.IGNORECASE,
-)
+from axon.core.cypher_guard import WRITE_KEYWORDS
 
 def handle_cypher(storage: StorageBackend, query: str) -> str:
     """Execute a raw Cypher query and return formatted results.
@@ -450,7 +439,7 @@ def handle_cypher(storage: StorageBackend, query: str) -> str:
     Returns:
         Formatted query results, or an error message if execution fails.
     """
-    if _WRITE_KEYWORDS.search(query):
+    if WRITE_KEYWORDS.search(query):
         return (
             "Query rejected: only read-only queries (MATCH/RETURN) are allowed. "
             "Write operations (DELETE, DROP, CREATE, SET, MERGE) are not permitted."
