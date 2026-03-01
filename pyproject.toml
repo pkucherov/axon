@@ -56,20 +56,27 @@ dev = [
 [project.scripts]
 axon = "axon.cli.main:app"
 
-[tool.uv.build-backend]
-module-name = "axon"
-source-exclude = [
-    "web/frontend/node_modules/**",
-    "web/frontend/src/**",
-    "web/frontend/*.ts",
-    "web/frontend/*.json",
-    "web/frontend/*.html",
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+packages = ["src/axon"]
+artifacts = [
+    "src/axon/web/frontend/dist/**",
 ]
 
-
-[build-system]
-requires = ["uv_build>=0.9.21,<0.10.0"]
-build-backend = "uv_build"
+[tool.hatch.build.targets.wheel]
+exclude = [
+    "src/axon/web/frontend/node_modules",
+    "src/axon/web/frontend/src",
+    "src/axon/web/frontend/package.json",
+    "src/axon/web/frontend/package-lock.json",
+    "src/axon/web/frontend/tsconfig*.json",
+    "src/axon/web/frontend/vite.config.ts",
+    "src/axon/web/frontend/index.html",
+    "src/axon/web/frontend/.gitignore",
+]
 
 [tool.ruff]
 target-version = "py311"
