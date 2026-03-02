@@ -276,16 +276,18 @@ async def trigger_reindex(request: Request) -> dict:
         raise HTTPException(status_code=409, detail="Reindex already in progress")
 
     def _run_reindex() -> None:
+        success = False
         try:
             _broadcast({"type": "reindex_start", "data": {}})
             storage = request.app.state.storage
             run_pipeline(repo_path, storage=storage, full=True)
             logger.info("Reindex completed for %s", repo_path)
+            success = True
         except Exception:
             logger.error("Reindex failed", exc_info=True)
         finally:
             _reindex_lock.release()
-            _broadcast({"type": "reindex_complete", "data": {}})
+            _broadcast({"type": "reindex_complete" if success else "reindex_failed", "data": {}})
 
     thread = threading.Thread(target=_run_reindex, daemon=True)
     thread.start()

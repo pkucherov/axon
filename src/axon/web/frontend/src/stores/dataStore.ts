@@ -46,7 +46,10 @@ export const useDataStore = create<DataStore>((set) => ({
   healthScore: null,
   deadCode: null,
   allProcesses: null,
-  cypherHistory: JSON.parse(localStorage.getItem('axon-cypher-history') || '[]'),
+  cypherHistory: (() => {
+    try { return JSON.parse(localStorage.getItem('axon-cypher-history') || '[]'); }
+    catch { return []; }
+  })(),
   cypherResult: null,
   loading: {},
 

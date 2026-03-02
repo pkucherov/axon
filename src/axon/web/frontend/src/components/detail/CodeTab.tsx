@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import DOMPurify from 'dompurify';
 import { fileApi } from '@/api/client';
 import { useDataStore } from '@/stores/dataStore';
 import { useGraphStore } from '@/stores/graphStore';
@@ -241,7 +242,7 @@ function ShikiRenderedCode({
           lineHeight: '18px',
           background: 'var(--bg-primary)',
         }}
-        dangerouslySetInnerHTML={{ __html: html }}
+        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html) }}
       />
     );
   }
@@ -293,7 +294,7 @@ function ShikiRenderedCode({
                   paddingRight: 8,
                   whiteSpace: 'pre',
                 }}
-                dangerouslySetInnerHTML={{ __html: lineHtml }}
+                dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(lineHtml) }}
               />
             </tr>
           );

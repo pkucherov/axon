@@ -9,13 +9,9 @@ import time
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from axon.core.cypher_guard import WRITE_KEYWORDS
+from axon.core.cypher_guard import WRITE_KEYWORDS, sanitize_cypher
 
 logger = logging.getLogger(__name__)
-
-# Strip single-line (//) and multi-line (/* */) comments before safety checks so
-# that write keywords hidden inside comments cannot bypass the guard.
-_COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
 
 router = APIRouter(tags=["cypher"])
 
@@ -55,7 +51,7 @@ def execute_cypher(body: CypherRequest, request: Request) -> dict:
     """Execute a read-only Cypher query and return structured results."""
     storage = request.app.state.storage
 
-    cleaned = _COMMENT_RE.sub("", body.query)
+    cleaned = sanitize_cypher(body.query)
     if WRITE_KEYWORDS.search(cleaned):
         raise HTTPException(
             status_code=400,

@@ -57,9 +57,9 @@ export const graphApi = {
 
 export const searchApi = {
   /** Run hybrid search (FTS + optional vector) and return ranked results. */
-  search: (query: string, limit = 20) =>
+  search: (query: string, limit = 20, options?: { signal?: AbortSignal }) =>
     api
-      .post('search', { json: { query, limit } })
+      .post('search', { json: { query, limit }, signal: options?.signal })
       .json<{ results: SearchResult[] }>(),
 };
 

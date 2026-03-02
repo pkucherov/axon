@@ -475,6 +475,9 @@ class KuzuBackend:
         escaped_q = escape_cypher(query)
         candidates: list[SearchResult] = []
 
+        # NOTE: QUERY_FTS_INDEX is a KuzuDB stored procedure that does not support
+        # parameterized $variables. String interpolation with escape_cypher() is the
+        # only option here. escape_cypher strips comments, semicolons, and escapes quotes.
         for table in _SEARCHABLE_TABLES:
             idx_name = f"{table.lower()}_fts"
             cypher = (

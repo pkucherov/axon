@@ -180,6 +180,7 @@ class TestGraphEndpoint:
         data = response.json()
         assert len(data["nodes"]) == 2
         assert len(data["edges"]) == 1
+        assert data["total"] == 2  # total node count
 
         # Verify node serialization shape (camelCase)
         n = data["nodes"][0]
@@ -461,30 +462,33 @@ class TestHealthEndpoint:
     def test_health_returns_score_and_breakdown(
         self, mock_storage: MagicMock, client: TestClient
     ) -> None:
-        # The health endpoint makes many execute_raw calls.
-        # Return sensible defaults for each.
+        # The health endpoint makes exactly 5 execute_raw calls:
+        # 1. Dead code UNION ALL (3 rows: Function, Method, Class)
+        # 2. Coupling strengths (rows of [strength])
+        # 3. Community count (1 row)
+        # 4. Avg confidence (1 row)
+        # 5. Coverage UNION ALL (2 rows: Function, Method)
         mock_storage.execute_raw.side_effect = [
-            [[100]],     # total symbols
-            [[5]],       # dead count
-            [[0.5]],     # coupling strength (single row for iteration)
-            [[3]],       # community count
-            [[0.9]],     # avg confidence
-            [[50]],      # callable count
-            [[10]],      # in-process count
+            [[100, 5], [50, 0], [20, 0]],  # dead code: Function/Method/Class [count, dead]
+            [[0.5], [0.3]],                  # coupling strengths
+            [[3]],                           # community count
+            [[0.9]],                         # avg confidence
+            [[50, 10], [30, 5]],            # coverage: Function/Method [callable, in_process]
         ]
 
         response = client.get("/health")
         assert response.status_code == 200
         data = response.json()
-        assert "score" in data
+        assert data["score"] > 0
         assert "breakdown" in data
-        assert isinstance(data["score"], (int, float))
         breakdown = data["breakdown"]
         assert "deadCode" in breakdown
         assert "coupling" in breakdown
         assert "modularity" in breakdown
         assert "confidence" in breakdown
         assert "coverage" in breakdown
+        assert breakdown["deadCode"] > 90  # very few dead symbols
+        assert breakdown["coupling"] == 100.0  # no high coupling
 
     def test_health_handles_empty_db(self, client: TestClient) -> None:
         """Health endpoint gracefully handles empty database (all defaults)."""
@@ -674,6 +678,34 @@ class TestCypherEndpoint:
         )
         assert response.status_code == 400
 
+    def test_write_keyword_in_comment_allowed(self, client: TestClient) -> None:
+        """Write keywords inside comments should not trigger the block."""
+        mock_storage = client.app.state.storage
+        mock_storage.execute_raw.return_value = [["ok"]]
+        response = client.post("/cypher", json={"query": "MATCH (n) /* CREATE */ RETURN n"})
+        assert response.status_code == 200
+
+    def test_write_keyword_outside_comment_blocked(self, client: TestClient) -> None:
+        """Write keywords outside comments should be blocked even with comments present."""
+        response = client.post("/cypher", json={"query": "/* harmless */ CREATE (n:Test)"})
+        assert response.status_code == 400
+
+    def test_write_query_blocked_remove(self, client: TestClient) -> None:
+        response = client.post("/cypher", json={"query": "MATCH (n) REMOVE n.name"})
+        assert response.status_code == 400
+
+    def test_write_query_blocked_install(self, client: TestClient) -> None:
+        response = client.post("/cypher", json={"query": "INSTALL httpfs"})
+        assert response.status_code == 400
+
+    def test_write_query_blocked_load(self, client: TestClient) -> None:
+        response = client.post("/cypher", json={"query": "LOAD FROM 'file.csv'"})
+        assert response.status_code == 400
+
+    def test_write_query_blocked_copy(self, client: TestClient) -> None:
+        response = client.post("/cypher", json={"query": "COPY Node FROM 'file.csv'"})
+        assert response.status_code == 400
+
     def test_query_execution_failure(
         self, mock_storage: MagicMock, client: TestClient
     ) -> None:
@@ -844,6 +876,48 @@ class TestDiffEndpoint:
         assert len(data["added"]) == 1
         assert data["added"][0]["name"] == "new_func"
 
+    def test_diff_with_modified_nodes(
+        self, mock_storage: MagicMock, tmp_path: Path
+    ) -> None:
+        """Modified nodes should serialize with before/after keys."""
+        from dataclasses import dataclass, field as dc_field
+
+        base_node = _sample_node(
+            node_id="function:src/utils.py:helper",
+            name="helper",
+            file_path="src/utils.py",
+        )
+        current_node = _sample_node(
+            node_id="function:src/utils.py:helper",
+            name="helper",
+            file_path="src/utils.py",
+        )
+        current_node.content = "def helper(): return 42"
+
+        @dataclass
+        class FakeModifiedResult:
+            added_nodes: list = dc_field(default_factory=list)
+            removed_nodes: list = dc_field(default_factory=list)
+            modified_nodes: list = dc_field(default_factory=list)
+            added_relationships: list = dc_field(default_factory=list)
+            removed_relationships: list = dc_field(default_factory=list)
+
+        fake_result = FakeModifiedResult(modified_nodes=[(base_node, current_node)])
+
+        app = _make_app(mock_storage, repo_path=tmp_path)
+        client = TestClient(app)
+
+        with patch("axon.web.routes.diff.diff_branches", return_value=fake_result):
+            response = client.post(
+                "/diff", json={"base": "main", "compare": "dev"}
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["modified"]) == 1
+        assert "before" in data["modified"][0]
+        assert "after" in data["modified"][0]
+
     def test_diff_value_error(
         self, mock_storage: MagicMock, tmp_path: Path
     ) -> None:
@@ -886,7 +960,7 @@ class TestReindexEndpoint:
 
     def test_reindex_success(self, client_with_repo: TestClient) -> None:
         """Returns started status when in watch mode with repo_path."""
-        with patch("axon.web.routes.analysis.threading") as mock_threading:
+        with patch("axon.web.routes.analysis.run_pipeline"):
             response = client_with_repo.post("/reindex")
 
         assert response.status_code == 200

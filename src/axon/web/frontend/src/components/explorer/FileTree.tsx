@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronRight, ChevronDown, Folder, File } from 'lucide-react';
+import { ChevronRight, ChevronDown, Folder } from 'lucide-react';
 import { fileApi } from '@/api/client';
 import { useGraphStore } from '@/stores/graphStore';
 import type { FolderNode } from '@/types';

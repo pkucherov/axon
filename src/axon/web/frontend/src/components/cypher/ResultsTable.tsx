@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { RESULTS_PAGE_SIZE } from '@/lib/constants';
 import type { CypherResult } from '@/types';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -31,6 +31,10 @@ function compareValues(a: unknown, b: unknown): number {
 export function ResultsTable({ result, error }: ResultsTableProps) {
   const [sort, setSort] = useState<SortState | null>(null);
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    setPage(0);
+  }, [result]);
 
   const sortedRows = useMemo(() => {
     if (!result) return [];

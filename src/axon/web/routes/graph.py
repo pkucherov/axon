@@ -76,7 +76,7 @@ def get_node(node_id: str, request: Request) -> dict:
 
     node = storage.get_node(node_id)
     if node is None:
-        raise HTTPException(status_code=404, detail=f"Node not found: {node_id}")
+        raise HTTPException(status_code=404, detail="Node not found")
 
     callers = [
         {"node": _serialize_node(n), "confidence": conf}

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { analysisApi } from '@/api/client';
 import { useDataStore } from '@/stores/dataStore';
 import { useGraphStore } from '@/stores/graphStore';
-import type { ImpactResult, GraphNode } from '@/types';
+import type { GraphNode } from '@/types';
 import { ChevronDown, ChevronRight, Radar } from 'lucide-react';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { TypeBadge } from '@/components/shared/TypeBadge';

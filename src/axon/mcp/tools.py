@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from axon.core.cypher_guard import WRITE_KEYWORDS
+from axon.core.cypher_guard import WRITE_KEYWORDS, sanitize_cypher
 from axon.core.search.hybrid import hybrid_search
 from axon.core.storage.base import StorageBackend
 from axon.core.storage.kuzu_backend import escape_cypher as _escape_cypher
@@ -25,9 +25,6 @@ MAX_TRAVERSE_DEPTH = 10
 # Regex to validate file paths before interpolating into Cypher queries.
 # Allows alphanumeric characters, dots, slashes, hyphens, underscores, and spaces.
 _SAFE_PATH = re.compile(r"^[a-zA-Z0-9._/\-\s]+$")
-
-# Strip single-line (//) and multi-line (/* */) comments before write-keyword checks.
-_COMMENT_RE = re.compile(r"//.*?$|/\*.*?\*/", re.MULTILINE | re.DOTALL)
 
 
 def _confidence_tag(confidence: float) -> str:
@@ -465,7 +462,7 @@ def handle_cypher(storage: StorageBackend, query: str) -> str:
         Formatted query results, or an error message if execution fails.
     """
     # Strip comments so write keywords hidden inside comment blocks are detected.
-    cleaned_query = _COMMENT_RE.sub("", query)
+    cleaned_query = sanitize_cypher(query)
     if WRITE_KEYWORDS.search(cleaned_query):
         return (
             "Query rejected: only read-only queries (MATCH/RETURN) are allowed. "

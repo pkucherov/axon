@@ -22,6 +22,7 @@ import { useDataStore } from '@/stores/dataStore';
 export function useSSE(): void {
   const sourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeRef = useRef(true);
   const setGraphData = useGraphStore((s) => s.setGraphData);
   const setOverview = useGraphStore((s) => s.setOverview);
   const setCommunities = useGraphStore((s) => s.setCommunities);
@@ -43,6 +44,7 @@ export function useSSE(): void {
           analysisApi.getHealth().catch(() => null),
         ])
           .then(([graphData, overview, commResp, deadResp, healthResp]) => {
+            if (!activeRef.current) return;
             setGraphData(graphData.nodes, graphData.edges);
             if (overview) setOverview(overview);
             if (commResp) setCommunities(commResp.communities);
@@ -74,6 +76,7 @@ export function useSSE(): void {
     connect();
 
     return () => {
+      activeRef.current = false;
       sourceRef.current?.close();
       sourceRef.current = null;
 

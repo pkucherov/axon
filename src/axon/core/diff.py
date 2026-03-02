@@ -212,7 +212,8 @@ def _build_graph_for_ref(repo_path: Path, ref: str) -> "tuple[KnowledgeGraph, Pa
             except subprocess.CalledProcessError:
                 logger.warning("Failed to remove worktree at %s", worktree_path)
 
-    return graph, worktree_path
+    # Convert to str before TemporaryDirectory cleanup; used only for path normalization
+    return graph, str(worktree_path)
 
 def format_diff(diff: StructuralDiff) -> str:
     """Format a StructuralDiff as human-readable output.
