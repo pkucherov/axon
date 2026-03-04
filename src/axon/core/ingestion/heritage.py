@@ -60,6 +60,7 @@ def _resolve_node(
 def process_heritage(
     parse_data: list[FileParseData],
     graph: KnowledgeGraph,
+    name_index: dict[str, list[str]] | None = None,
 ) -> None:
     """Create EXTENDS and IMPLEMENTS relationships from heritage tuples.
 
@@ -75,7 +76,7 @@ def process_heritage(
         parse_data: File parse results produced by the parser phase.
         graph: The knowledge graph to populate with heritage relationships.
     """
-    symbol_index = build_name_index(graph, _HERITAGE_LABELS)
+    symbol_index = name_index if name_index is not None else build_name_index(graph, _HERITAGE_LABELS)
 
     for fpd in parse_data:
         for class_name, kind, parent_name in fpd.parse_result.heritage:

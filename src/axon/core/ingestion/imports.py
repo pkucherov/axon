@@ -117,7 +117,8 @@ def process_imports(
     """
     file_index = build_file_index(graph)
     source_roots = _detect_source_roots(file_index)
-    seen: set[tuple[str, str]] = set()
+    # Merge symbols from multiple imports of the same file pair.
+    seen: dict[tuple[str, str], set[str]] = {}
 
     for fpd in parse_data:
         source_file_id = generate_id(NodeLabel.FILE, fpd.file_path)
@@ -128,20 +129,21 @@ def process_imports(
                 continue
 
             pair = (source_file_id, target_id)
-            if pair in seen:
-                continue
-            seen.add(pair)
+            if pair not in seen:
+                seen[pair] = set()
+            seen[pair].update(imp.names)
 
-            rel_id = f"imports:{source_file_id}->{target_id}"
-            graph.add_relationship(
-                GraphRelationship(
-                    id=rel_id,
-                    type=RelType.IMPORTS,
-                    source=source_file_id,
-                    target=target_id,
-                    properties={"symbols": ",".join(imp.names)},
-                )
+    for (source_file_id, target_id), symbols in seen.items():
+        rel_id = f"imports:{source_file_id}->{target_id}"
+        graph.add_relationship(
+            GraphRelationship(
+                id=rel_id,
+                type=RelType.IMPORTS,
+                source=source_file_id,
+                target=target_id,
+                properties={"symbols": ",".join(sorted(symbols))},
             )
+        )
 
 def _detect_language(file_path: str) -> str:
     """Infer language from a file's extension."""

@@ -201,24 +201,23 @@ def _clear_protocol_conformance_false_positives(graph: KnowledgeGraph) -> int:
 
     Returns the number of methods un-flagged.
     """
-    protocol_methods: dict[str, set[str]] = {}
-    for cls_node in graph.get_nodes_by_label(NodeLabel.CLASS):
-        if not cls_node.properties.get("is_protocol"):
-            continue
-        methods = set()
-        for method in graph.get_nodes_by_label(NodeLabel.METHOD):
-            if method.class_name == cls_node.name and not _is_dunder(method.name):
-                methods.add(method.name)
-        if methods:
-            protocol_methods[cls_node.name] = methods
-
-    if not protocol_methods:
-        return 0
-
+    # Build class→methods index once (O(methods) instead of O(protocols × methods)).
     class_methods: dict[str, set[str]] = {}
     for method in graph.get_nodes_by_label(NodeLabel.METHOD):
         if method.class_name:
             class_methods.setdefault(method.class_name, set()).add(method.name)
+
+    protocol_methods: dict[str, set[str]] = {}
+    for cls_node in graph.get_nodes_by_label(NodeLabel.CLASS):
+        if not cls_node.properties.get("is_protocol"):
+            continue
+        methods = class_methods.get(cls_node.name, set())
+        non_dunder = {m for m in methods if not _is_dunder(m)}
+        if non_dunder:
+            protocol_methods[cls_node.name] = non_dunder
+
+    if not protocol_methods:
+        return 0
 
     clearable: dict[str, set[str]] = {}
     for proto_name, required in protocol_methods.items():

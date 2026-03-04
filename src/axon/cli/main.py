@@ -128,7 +128,6 @@ def main(
 @app.command()
 def analyze(
     path: Path = typer.Argument(Path("."), help="Path to the repository to index."),
-    full: bool = typer.Option(False, "--full", help="Perform a full re-index."),
     no_embeddings: bool = typer.Option(False, "--no-embeddings", help="Skip vector embedding generation."),
 ) -> None:
     """Index a repository into a knowledge graph."""
@@ -164,7 +163,6 @@ def analyze(
         _, result = run_pipeline(
             repo_path=repo_path,
             storage=storage,
-            full=full,
             progress_callback=on_progress,
             embeddings=not no_embeddings,
         )
@@ -359,7 +357,7 @@ def watch() -> None:
 
     if not (axon_dir / "meta.json").exists():
         console.print("[bold]Running initial index...[/bold]")
-        _, result = run_pipeline(repo_path, storage, full=True)
+        _, result = run_pipeline(repo_path, storage)
         meta = _build_meta(result, repo_path)
         meta_path = axon_dir / "meta.json"
         meta_path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
@@ -435,7 +433,7 @@ def serve(
             if pct == 0.0:
                 print(f"  {phase}...", file=sys.stderr, flush=True)
 
-        _, result = run_pipeline(repo_path, storage, full=True, progress_callback=_stderr_progress)
+        _, result = run_pipeline(repo_path, storage, progress_callback=_stderr_progress)
 
         meta = _build_meta(result, repo_path)
         meta_path = axon_dir / "meta.json"

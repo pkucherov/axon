@@ -278,7 +278,7 @@ async def trigger_reindex(request: Request) -> dict:
         try:
             _broadcast({"type": "reindex_start", "data": {}})
             storage = request.app.state.storage
-            run_pipeline(repo_path, storage=storage, full=True)
+            run_pipeline(repo_path, storage=storage)
             logger.info("Reindex completed for %s", repo_path)
             success = True
         except Exception:

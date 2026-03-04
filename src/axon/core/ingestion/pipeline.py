@@ -38,6 +38,7 @@ from axon.core.ingestion.imports import process_imports
 from axon.core.ingestion.parser_phase import process_parsing
 from axon.core.ingestion.processes import process_processes
 from axon.core.ingestion.structure import process_structure
+from axon.core.ingestion.symbol_lookup import build_name_index
 from axon.core.ingestion.types import process_types
 from axon.core.ingestion.walker import FileEntry, walk_repo
 from axon.core.storage.base import StorageBackend
@@ -68,7 +69,6 @@ _SYMBOL_LABELS: frozenset[NodeLabel] = frozenset(NodeLabel) - {
 def run_pipeline(
     repo_path: Path,
     storage: StorageBackend | None = None,
-    full: bool = False,
     progress_callback: Callable[[str, float], None] | None = None,
     embeddings: bool = True,
 ) -> tuple[KnowledgeGraph, PipelineResult]:
@@ -85,9 +85,6 @@ def run_pipeline(
     storage:
         An already-initialised :class:`StorageBackend` to persist the graph.
         Pass ``None`` to skip storage loading.
-    full:
-        When ``True``, skip incremental-diff logic (Phase 0) and force a full
-        re-index.  Currently Phase 0 is a no-op regardless of this flag.
     progress_callback:
         Optional ``(phase_name, progress)`` callback where *progress* is a
         float in ``[0.0, 1.0]``.
@@ -127,16 +124,23 @@ def run_pipeline(
     process_imports(parse_data, graph)
     report("Resolving imports", 1.0)
 
+    # Build shared name index once — used by calls, heritage, and types phases.
+    _SHARED_LABELS = (
+        NodeLabel.FUNCTION, NodeLabel.METHOD, NodeLabel.CLASS,
+        NodeLabel.INTERFACE, NodeLabel.TYPE_ALIAS,
+    )
+    shared_name_index = build_name_index(graph, _SHARED_LABELS)
+
     report("Tracing calls", 0.0)
-    process_calls(parse_data, graph)
+    process_calls(parse_data, graph, name_index=shared_name_index)
     report("Tracing calls", 1.0)
 
     report("Extracting heritage", 0.0)
-    process_heritage(parse_data, graph)
+    process_heritage(parse_data, graph, name_index=shared_name_index)
     report("Extracting heritage", 1.0)
 
     report("Analyzing types", 0.0)
-    process_types(parse_data, graph)
+    process_types(parse_data, graph, name_index=shared_name_index)
     report("Analyzing types", 1.0)
 
     report("Detecting communities", 0.0)
@@ -188,6 +192,7 @@ def reindex_files(
     file_entries: list[FileEntry],
     repo_path: Path,
     storage: StorageBackend,
+    rebuild_fts: bool = True,
 ) -> KnowledgeGraph:
     """Re-index specific files through phases 2-7 (file-local phases).
 
@@ -241,7 +246,8 @@ def reindex_files(
     if saved_edges:
         storage.add_relationships(saved_edges)
 
-    storage.rebuild_fts_indexes()
+    if rebuild_fts:
+        storage.rebuild_fts_indexes()
 
     return graph
 
@@ -251,5 +257,5 @@ def build_graph(repo_path: Path) -> KnowledgeGraph:
     This is used by branch comparison to build a graph snapshot without
     needing a storage backend.
     """
-    graph, _ = run_pipeline(repo_path)
+    graph, _ = run_pipeline(repo_path, embeddings=False)
     return graph

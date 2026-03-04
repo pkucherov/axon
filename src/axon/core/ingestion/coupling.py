@@ -100,8 +100,8 @@ def build_cochange_matrix(
     commits: list[list[str]],
     min_cochanges: int = 3,
     max_files_per_commit: int = 50,
-) -> dict[tuple[str, str], int]:
-    """Build a co-change frequency matrix from commit data.
+) -> tuple[dict[tuple[str, str], int], dict[str, int]]:
+    """Build a co-change frequency matrix and per-file change counts.
 
     For every pair of files that appear in the same commit, their co-change
     count is incremented.  Only pairs whose count meets or exceeds
@@ -120,18 +120,24 @@ def build_cochange_matrix(
         max_files_per_commit: Skip commits with more files than this.
 
     Returns:
-        A dict mapping ``(file_a, file_b)`` sorted tuples to their count.
+        A tuple of (cochange_matrix, total_changes) where cochange_matrix
+        maps ``(file_a, file_b)`` sorted tuples to their count, and
+        total_changes maps each file to its total commit count.
     """
     counts: dict[tuple[str, str], int] = defaultdict(int)
+    total_changes: dict[str, int] = defaultdict(int)
 
     for files in commits:
         unique_files = sorted(set(files))
+        for f in unique_files:
+            total_changes[f] += 1
         if len(unique_files) > max_files_per_commit:
             continue
         for a, b in combinations(unique_files, 2):
             counts[(a, b)] += 1
 
-    return {pair: count for pair, count in counts.items() if count >= min_cochanges}
+    filtered = {pair: count for pair, count in counts.items() if count >= min_cochanges}
+    return filtered, dict(total_changes)
 
 def calculate_coupling(
     file_a: str,
@@ -194,13 +200,7 @@ def process_coupling(
     if commits is None:
         commits = parse_git_log(repo_path, graph_files=graph_files)
 
-    cochange = build_cochange_matrix(commits, min_cochanges=min_cochanges)
-
-    # Count total changes per file (across all commits).
-    total_changes: dict[str, int] = defaultdict(int)
-    for files in commits:
-        for f in set(files):
-            total_changes[f] += 1
+    cochange, total_changes = build_cochange_matrix(commits, min_cochanges=min_cochanges)
 
     path_to_id: dict[str, str] = {n.file_path: n.id for n in file_nodes}
 

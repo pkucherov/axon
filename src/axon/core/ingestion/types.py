@@ -73,6 +73,7 @@ def _resolve_type(
 def process_types(
     parse_data: list[FileParseData],
     graph: KnowledgeGraph,
+    name_index: dict[str, list[str]] | None = None,
 ) -> None:
     """Resolve type references and create USES_TYPE relationships in the graph.
 
@@ -94,7 +95,7 @@ def process_types(
         parse_data: File parse results from the parser phase.
         graph: The knowledge graph to populate with USES_TYPE relationships.
     """
-    type_index = build_name_index(graph, _TYPE_LABELS)
+    type_index = name_index if name_index is not None else build_name_index(graph, _TYPE_LABELS)
     file_sym_index = build_file_symbol_index(graph, _CONTAINER_LABELS)
     seen: set[str] = set()
 

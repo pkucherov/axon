@@ -7,7 +7,6 @@ O(log N) binary search.
 
 from __future__ import annotations
 
-import bisect
 from collections import defaultdict
 
 from axon.core.graph.graph import KnowledgeGraph
@@ -117,21 +116,13 @@ def find_containing_symbol(
     if not entries:
         return None
 
-    # Binary search: find the rightmost entry whose start_line <= line.
-    start_lines = file_symbol_index.get_start_lines(file_path)
-    if not start_lines:
-        return None
-    idx = bisect.bisect_right(start_lines, line) - 1
-
     best_id: str | None = None
     best_span = float("inf")
 
-    # Scan a small window around idx to handle nested/overlapping symbols.
-    search_start = max(0, idx - 10)
-    search_end = min(len(entries), idx + 10)
-
-    for i in range(search_start, search_end):
-        start, end, span, nid = entries[i]
+    # Scan all entries for the file to find the narrowest containing span.
+    # Files typically have <200 symbols so a full scan is fast and correct
+    # (the previous ±10 window could miss deeply nested symbols).
+    for start, end, span, nid in entries:
         if start <= line <= end and span < best_span:
             best_span = span
             best_id = nid

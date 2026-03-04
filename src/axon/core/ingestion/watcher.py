@@ -97,7 +97,7 @@ def _reindex_files(
             reindexed_paths.add(relative)
 
     if entries:
-        reindex_files(entries, repo_path, storage)
+        reindex_files(entries, repo_path, storage, rebuild_fts=False)
 
     return len(reindexed_paths), reindexed_paths
 
@@ -119,44 +119,60 @@ def _compute_dirty_node_ids(graph: KnowledgeGraph, dirty_files: set[str]) -> set
     return dirty_node_ids | neighbor_ids
 
 
+# Threshold: if fewer than this many files changed, skip communities/processes.
+_SMALL_CHANGE_THRESHOLD = 3
+
+
 def _run_incremental_global_phases(
     storage: StorageBackend,
     repo_path: Path,
     dirty_files: set[str],
     run_coupling: bool = False,
 ) -> None:
-    """Run global phases incrementally using graph hydrated from storage."""
+    """Run global phases incrementally using graph hydrated from storage.
+
+    When the change is small (< _SMALL_CHANGE_THRESHOLD files), only dead code
+    detection runs (communities and processes are expensive and unlikely to
+    shift from a 1-2 file change).
+    """
     from axon.core.ingestion.community import process_communities
     from axon.core.ingestion.coupling import process_coupling
     from axon.core.ingestion.dead_code import process_dead_code
     from axon.core.ingestion.processes import process_processes
     from axon.core.embeddings.embedder import embed_nodes
 
+    small_change = len(dirty_files) < _SMALL_CHANGE_THRESHOLD
+
     storage.delete_synthetic_nodes()
 
     logger.info("Hydrating graph from storage...")
     graph = storage.load_graph()
-    num_communities = process_communities(graph)
-    logger.info("Communities: %d", num_communities)
 
-    num_processes = process_processes(graph)
-    logger.info("Processes: %d", num_processes)
+    if not small_change:
+        num_communities = process_communities(graph)
+        logger.info("Communities: %d", num_communities)
+
+        num_processes = process_processes(graph)
+        logger.info("Processes: %d", num_processes)
+    else:
+        logger.info("Small change (%d files) — skipping communities/processes", len(dirty_files))
 
     num_dead = process_dead_code(graph)
     logger.info("Dead code: %d", num_dead)
 
-    new_nodes = (
-        list(graph.get_nodes_by_label(NodeLabel.COMMUNITY))
-        + list(graph.get_nodes_by_label(NodeLabel.PROCESS))
-    )
-    new_rels = (
-        list(graph.get_relationships_by_type(RelType.MEMBER_OF))
-        + list(graph.get_relationships_by_type(RelType.STEP_IN_PROCESS))
-    )
-    if new_nodes:
-        storage.add_nodes(new_nodes)
-    if new_rels:
-        storage.add_relationships(new_rels)
+    if not small_change:
+        new_nodes = (
+            list(graph.get_nodes_by_label(NodeLabel.COMMUNITY))
+            + list(graph.get_nodes_by_label(NodeLabel.PROCESS))
+        )
+        new_rels = (
+            list(graph.get_relationships_by_type(RelType.MEMBER_OF))
+            + list(graph.get_relationships_by_type(RelType.STEP_IN_PROCESS))
+        )
+        if new_nodes:
+            storage.add_nodes(new_nodes)
+        if new_rels:
+            storage.add_relationships(new_rels)
 
     dead_ids = {n.id for n in graph.iter_nodes() if n.is_dead}
     alive_ids = {n.id for n in graph.iter_nodes() if not n.is_dead}

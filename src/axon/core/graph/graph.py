@@ -33,6 +33,10 @@ class KnowledgeGraph:
         self._by_rel_type: dict[RelType, dict[str, GraphRelationship]] = defaultdict(dict)
         self._outgoing: dict[str, dict[str, GraphRelationship]] = defaultdict(dict)
         self._incoming: dict[str, dict[str, GraphRelationship]] = defaultdict(dict)
+        # Type-indexed incoming: node_id → {RelType → {rel_id}}
+        self._incoming_by_type: dict[str, dict[RelType, set[str]]] = defaultdict(
+            lambda: defaultdict(set)
+        )
 
     def iter_nodes(self) -> Iterator[GraphNode]:
         """Yield all nodes without creating an intermediate list."""
@@ -59,10 +63,9 @@ class KnowledgeGraph:
     def has_incoming(self, node_id: str, rel_type: RelType) -> bool:
         """Return ``True`` if *node_id* has any incoming edge of *rel_type*.
 
-        Checks the index without materializing a list of relationships.
+        O(1) lookup via the type-indexed secondary index.
         """
-        rels = self._incoming.get(node_id, {})
-        return any(r.type == rel_type for r in rels.values())
+        return bool(self._incoming_by_type.get(node_id, {}).get(rel_type))
 
     def add_node(self, node: GraphNode) -> None:
         """Add *node* to the graph, replacing any existing node with the same id."""
@@ -117,10 +120,12 @@ class KnowledgeGraph:
             self._by_rel_type[old.type].pop(rel.id, None)
             self._outgoing[old.source].pop(rel.id, None)
             self._incoming[old.target].pop(rel.id, None)
+            self._incoming_by_type[old.target][old.type].discard(rel.id)
         self._relationships[rel.id] = rel
         self._by_rel_type[rel.type][rel.id] = rel
         self._outgoing[rel.source][rel.id] = rel
         self._incoming[rel.target][rel.id] = rel
+        self._incoming_by_type[rel.target][rel.type].add(rel.id)
 
     def get_nodes_by_label(self, label: NodeLabel) -> list[GraphNode]:
         """Return all nodes whose label matches *label*."""
@@ -165,8 +170,12 @@ class KnowledgeGraph:
             self._relationships.pop(rel.id, None)
             self._by_rel_type.get(rel.type, {}).pop(rel.id, None)
             self._incoming.get(rel.target, {}).pop(rel.id, None)
+            ibt = self._incoming_by_type.get(rel.target, {}).get(rel.type)
+            if ibt is not None:
+                ibt.discard(rel.id)
 
         in_rels = list(self._incoming.pop(node_id, {}).values())
+        self._incoming_by_type.pop(node_id, None)
         for rel in in_rels:
             self._relationships.pop(rel.id, None)
             self._by_rel_type.get(rel.type, {}).pop(rel.id, None)

@@ -30,14 +30,18 @@ def process_structure(files: list[FileEntry], graph: KnowledgeGraph) -> None:
     folder-to-file relationships are expressed as :pyclass:`RelType.CONTAINS`
     edges.
 
+    Runs in two passes:
+      1. Collect all unique folder paths from file entries.
+      2. Create all nodes (folders + files) and edges (CONTAINS) in one loop each.
+
     Args:
         files: File entries to process.  Each entry carries the relative path,
             raw content, and detected language.
         graph: The knowledge graph to populate.  Nodes and relationships are
             **added** (existing content is not removed).
     """
+    # Pass 1: collect unique folder paths.
     folder_paths: set[str] = set()
-
     for file_info in files:
         pure = PurePosixPath(file_info.path)
         for parent in pure.parents:
@@ -46,6 +50,7 @@ def process_structure(files: list[FileEntry], graph: KnowledgeGraph) -> None:
                 continue
             folder_paths.add(parent_str)
 
+    # Pass 2: create all nodes and edges.
     for dir_path in folder_paths:
         folder_id = generate_id(NodeLabel.FOLDER, dir_path)
         if graph.get_node(folder_id) is None:
@@ -55,6 +60,20 @@ def process_structure(files: list[FileEntry], graph: KnowledgeGraph) -> None:
                     label=NodeLabel.FOLDER,
                     name=PurePosixPath(dir_path).name,
                     file_path=dir_path,
+                )
+            )
+        # Folder → parent folder CONTAINS edge.
+        dir_pure = PurePosixPath(dir_path)
+        parent_str = str(dir_pure.parent)
+        if parent_str != ".":
+            parent_id = generate_id(NodeLabel.FOLDER, parent_str)
+            rel_id = f"contains:{parent_id}->{folder_id}"
+            graph.add_relationship(
+                GraphRelationship(
+                    id=rel_id,
+                    type=RelType.CONTAINS,
+                    source=parent_id,
+                    target=folder_id,
                 )
             )
 
@@ -70,41 +89,16 @@ def process_structure(files: list[FileEntry], graph: KnowledgeGraph) -> None:
                 language=file_info.language,
             )
         )
-
-    # Folder -> Folder (parent contains child)
-    for dir_path in folder_paths:
-        pure = PurePosixPath(dir_path)
-        parent_str = str(pure.parent)
-        if parent_str == ".":
-            # Top-level folder has no parent — skip.
-            continue
-        parent_id = generate_id(NodeLabel.FOLDER, parent_str)
-        child_id = generate_id(NodeLabel.FOLDER, dir_path)
-        rel_id = f"contains:{parent_id}->{child_id}"
-        graph.add_relationship(
-            GraphRelationship(
-                id=rel_id,
-                type=RelType.CONTAINS,
-                source=parent_id,
-                target=child_id,
+        # Folder → file CONTAINS edge.
+        parent_str = str(PurePosixPath(file_info.path).parent)
+        if parent_str != ".":
+            parent_id = generate_id(NodeLabel.FOLDER, parent_str)
+            rel_id = f"contains:{parent_id}->{file_id}"
+            graph.add_relationship(
+                GraphRelationship(
+                    id=rel_id,
+                    type=RelType.CONTAINS,
+                    source=parent_id,
+                    target=file_id,
+                )
             )
-        )
-
-    # Folder -> File (immediate parent folder contains file)
-    for file_info in files:
-        pure = PurePosixPath(file_info.path)
-        parent_str = str(pure.parent)
-        if parent_str == ".":
-            # Root-level file — no containing folder.
-            continue
-        parent_id = generate_id(NodeLabel.FOLDER, parent_str)
-        file_id = generate_id(NodeLabel.FILE, file_info.path)
-        rel_id = f"contains:{parent_id}->{file_id}"
-        graph.add_relationship(
-            GraphRelationship(
-                id=rel_id,
-                type=RelType.CONTAINS,
-                source=parent_id,
-                target=file_id,
-            )
-        )

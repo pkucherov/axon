@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json as _json
 import logging
 import math
 import tempfile
@@ -55,8 +56,12 @@ _NODE_PROPERTIES = (
     "is_entry_point BOOL, "
     "is_exported BOOL, "
     "cohesion DOUBLE, "
+    "properties_json STRING, "
     "PRIMARY KEY (id)"
 )
+
+# Fields already stored as dedicated columns — excluded from properties_json.
+_DEDICATED_PROPS = frozenset({"cohesion"})
 
 _REL_PROPERTIES = (
     "rel_type STRING, "
@@ -67,6 +72,14 @@ _REL_PROPERTIES = (
     "co_changes INT64, "
     "symbols STRING"
 )
+
+def _serialize_extra_props(props: dict[str, Any] | None) -> str:
+    """Serialize node properties to JSON, excluding dedicated columns."""
+    if not props:
+        return ""
+    extra = {k: v for k, v in props.items() if k not in _DEDICATED_PROPS}
+    return _json.dumps(extra) if extra else ""
+
 
 def escape_cypher(value: str) -> str:
     """Escape a string for safe inclusion in a Cypher literal."""
@@ -873,7 +886,8 @@ class KuzuBackend:
     def _csv_copy(self, table: str, rows: list[list[Any]]) -> None:
         """Write *rows* to a temporary CSV and COPY FROM into *table*.
 
-        Always cleans up the temp file, even on failure.
+        Uses PARALLEL=FALSE to avoid concurrency issues with KuzuDB's
+        parallel CSV reader.  Always cleans up the temp file, even on failure.
         """
         conn = self._require_conn()
         csv_path: str | None = None
@@ -884,7 +898,7 @@ class KuzuBackend:
                 writer = csv.writer(f)
                 writer.writerows(rows)
                 csv_path = f.name
-            conn.execute(f'COPY {table} FROM "{csv_path}" (HEADER=false)')
+            conn.execute(f'COPY {table} FROM "{csv_path}" (HEADER=false, PARALLEL=false)')
         finally:
             if csv_path:
                 Path(csv_path).unlink(missing_ok=True)
@@ -906,12 +920,20 @@ class KuzuBackend:
                     [node.id, node.name, node.file_path, node.start_line,
                      node.end_line, node.content, node.signature, node.language,
                      node.class_name, node.is_dead, node.is_entry_point,
-                     node.is_exported, (node.properties or {}).get("cohesion")]
+                     node.is_exported, (node.properties or {}).get("cohesion"),
+                     _serialize_extra_props(node.properties)]
                     for node in nodes
                 ])
             return True
         except Exception:
             logger.debug("CSV bulk_load_nodes failed, falling back", exc_info=True)
+            # Clear partially loaded tables to avoid duplicate-key errors on fallback.
+            conn = self._require_conn()
+            for table in by_table:
+                try:
+                    conn.execute(f"MATCH (n:{table}) DETACH DELETE n")
+                except Exception:
+                    pass
             return False
 
     def _bulk_load_rels_csv(self, graph: KnowledgeGraph) -> bool:
@@ -984,6 +1006,11 @@ class KuzuBackend:
         for table in _NODE_TABLE_NAMES:
             stmt = f"CREATE NODE TABLE IF NOT EXISTS {table}({_NODE_PROPERTIES})"
             conn.execute(stmt)
+            # Migration: add properties_json column for existing databases.
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD properties_json STRING DEFAULT ''")
+            except Exception:
+                pass  # Column already exists.
 
         conn.execute(
             f"CREATE NODE TABLE IF NOT EXISTS Embedding({_EMBEDDING_PROPERTIES})"
@@ -1035,7 +1062,8 @@ class KuzuBackend:
             f"content: $content, signature: $signature, "
             f"language: $language, class_name: $class_name, "
             f"is_dead: $is_dead, is_entry_point: $is_entry_point, "
-            f"is_exported: $is_exported, cohesion: $cohesion"
+            f"is_exported: $is_exported, cohesion: $cohesion, "
+            f"properties_json: $properties_json"
             f"}})"
         )
         props = node.properties or {}
@@ -1053,6 +1081,7 @@ class KuzuBackend:
             "is_entry_point": node.is_entry_point,
             "is_exported": node.is_exported,
             "cohesion": props.get("cohesion"),
+            "properties_json": _serialize_extra_props(props),
         }
         try:
             conn.execute(query, parameters=params)
@@ -1149,7 +1178,8 @@ class KuzuBackend:
         Column order matches the property definition:
         0=id, 1=name, 2=file_path, 3=start_line, 4=end_line,
         5=content, 6=signature, 7=language, 8=class_name,
-        9=is_dead, 10=is_entry_point, 11=is_exported, 12=cohesion
+        9=is_dead, 10=is_entry_point, 11=is_exported, 12=cohesion,
+        13=properties_json
         """
         try:
             nid = node_id or row[0]
@@ -1162,6 +1192,15 @@ class KuzuBackend:
             props: dict[str, Any] = {}
             if len(row) > 12 and row[12] is not None:
                 props["cohesion"] = float(row[12])
+
+            # Deserialize extra properties from JSON column.
+            if len(row) > 13 and row[13]:
+                try:
+                    extra = _json.loads(row[13])
+                    if isinstance(extra, dict):
+                        props.update(extra)
+                except (ValueError, TypeError):
+                    pass
 
             return GraphNode(
                 id=row[0],

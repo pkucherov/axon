@@ -31,13 +31,24 @@ _CALLABLE_LABELS: tuple[NodeLabel, ...] = (
     NodeLabel.CLASS,
 )
 
+# Heritage edge types to include in the community graph with reduced weight.
+_HERITAGE_EDGE_TYPES: tuple[RelType, ...] = (
+    RelType.EXTENDS,
+    RelType.IMPLEMENTS,
+    RelType.USES_TYPE,
+)
+_CALLS_WEIGHT = 1.0
+_HERITAGE_WEIGHT = 0.5
+
+
 def export_to_igraph(
     graph: KnowledgeGraph,
 ) -> tuple[ig.Graph, dict[int, str]]:
-    """Extract the call graph from *graph* and build an igraph representation.
+    """Extract the call + heritage graph and build an igraph representation.
 
-    Only Function, Method, and Class nodes are included. Only CALLS
-    relationships between those nodes are used as edges.
+    Includes Function, Method, and Class nodes. CALLS edges get weight 1.0;
+    EXTENDS, IMPLEMENTS, and USES_TYPE edges get weight 0.5 so heritage
+    relationships influence community structure without dominating.
 
     Args:
         graph: The Axon knowledge graph.
@@ -58,15 +69,28 @@ def export_to_igraph(
     num_vertices = len(node_id_to_index)
 
     edge_list: list[tuple[int, int]] = []
+    edge_weights: list[float] = []
+
     for rel in graph.get_relationships_by_type(RelType.CALLS):
         src_idx = node_id_to_index.get(rel.source)
         tgt_idx = node_id_to_index.get(rel.target)
         if src_idx is not None and tgt_idx is not None:
             edge_list.append((src_idx, tgt_idx))
+            edge_weights.append(_CALLS_WEIGHT)
+
+    for rel_type in _HERITAGE_EDGE_TYPES:
+        for rel in graph.get_relationships_by_type(rel_type):
+            src_idx = node_id_to_index.get(rel.source)
+            tgt_idx = node_id_to_index.get(rel.target)
+            if src_idx is not None and tgt_idx is not None:
+                edge_list.append((src_idx, tgt_idx))
+                edge_weights.append(_HERITAGE_WEIGHT)
 
     ig_graph = ig.Graph(directed=True)
     ig_graph.add_vertices(num_vertices)
     ig_graph.add_edges(edge_list)
+    if edge_weights:
+        ig_graph.es["weight"] = edge_weights
 
     return ig_graph, index_to_node_id
 
@@ -140,8 +164,9 @@ def process_communities(
         )
         return 0
 
+    weights = ig_graph.es["weight"] if ig_graph.ecount() > 0 and "weight" in ig_graph.es.attributes() else None
     partition = leidenalg.find_partition(
-        ig_graph, leidenalg.ModularityVertexPartition
+        ig_graph, leidenalg.ModularityVertexPartition, weights=weights
     )
 
     community_count = 0

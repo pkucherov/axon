@@ -281,7 +281,7 @@ class TestReindexFilesReturnType:
     def test_returns_count_and_paths(
         self, tmp_repo: Path, storage: KuzuBackend
     ) -> None:
-        run_pipeline(tmp_repo, storage, full=True, embeddings=False)
+        run_pipeline(tmp_repo, storage, embeddings=False)
 
         changed = [tmp_repo / "src" / "app.py"]
         count, paths = _reindex_files(changed, tmp_repo, storage)
@@ -293,7 +293,7 @@ class TestComputeDirtyNodeIds:
     def test_includes_dirty_file_nodes(
         self, tmp_repo: Path, storage: KuzuBackend
     ) -> None:
-        run_pipeline(tmp_repo, storage, full=True, embeddings=False)
+        run_pipeline(tmp_repo, storage, embeddings=False)
 
         graph = storage.load_graph()
         dirty_ids = _compute_dirty_node_ids(graph, {"src/app.py"})
@@ -310,7 +310,7 @@ class TestRunIncrementalGlobalPhases:
     def test_no_stale_synthetic_nodes_after_rerun(
         self, tmp_repo: Path, storage: KuzuBackend
     ) -> None:
-        run_pipeline(tmp_repo, storage, full=True, embeddings=False)
+        run_pipeline(tmp_repo, storage, embeddings=False)
 
         # First incremental run — should create communities.
         _run_incremental_global_phases(

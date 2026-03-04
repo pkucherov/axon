@@ -34,6 +34,23 @@ _PYTHON_DECORATOR_PATTERNS: tuple[str, ...] = (
     "@click.command",
 )
 
+# TypeScript files where exports are true entry points (index/entry/app files).
+_TS_ENTRY_SUFFIXES: tuple[str, ...] = (
+    "index.ts", "index.tsx", "index.js", "index.jsx",
+    "main.ts", "main.tsx", "main.js",
+    "app.ts", "app.tsx", "app.js",
+    "server.ts", "server.js",
+    "handler.ts", "handler.js",
+    "route.ts", "route.tsx",
+    "page.tsx", "page.ts",
+    "layout.tsx", "layout.ts",
+)
+
+
+def _is_ts_entry_file(file_path: str) -> bool:
+    """Return ``True`` if *file_path* is a TypeScript/JS entry or index file."""
+    return any(file_path.endswith(suffix) for suffix in _TS_ENTRY_SUFFIXES)
+
 def find_entry_points(graph: KnowledgeGraph) -> list[GraphNode]:
     """Find functions/methods that serve as execution entry points.
 
@@ -112,7 +129,9 @@ def _matches_framework_pattern(node: GraphNode) -> bool:
     ):
         if name in ("handler", "middleware"):
             return True
-        if node.is_exported:
+        # Only treat exports as entry points if they match framework patterns
+        # or live in index/entry files — not every exported function is an EP.
+        if node.is_exported and _is_ts_entry_file(node.file_path):
             return True
 
     return False
@@ -200,7 +219,7 @@ def generate_process_label(steps: list[GraphNode]) -> str:
 def deduplicate_flows(flows: list[list[GraphNode]]) -> list[list[GraphNode]]:
     """Remove flows that are too similar to longer ones.
 
-    Two flows are "similar" if they share > 70% of their nodes (by ID).
+    Two flows are "similar" if they share > 50% of their nodes (by ID).
     When a pair is similar, the shorter flow is discarded.
 
     Args:
