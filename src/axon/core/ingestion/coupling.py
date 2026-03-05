@@ -20,6 +20,7 @@ from pathlib import Path
 
 from axon.core.graph.graph import KnowledgeGraph
 from axon.core.graph.model import (
+    GraphNode,
     GraphRelationship,
     NodeLabel,
     RelType,
@@ -156,8 +157,10 @@ def resolve_coupling(
     *,
     commits: list[list[str]] | None = None,
     min_cochanges: int = 3,
+    file_nodes: list[GraphNode] | None = None,
 ) -> list[ResolvedEdge]:
-    file_nodes = graph.get_nodes_by_label(NodeLabel.FILE)
+    if file_nodes is None:
+        file_nodes = graph.get_nodes_by_label(NodeLabel.FILE)
     graph_files: set[str] = {n.file_path for n in file_nodes}
 
     if commits is None:

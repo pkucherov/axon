@@ -150,6 +150,15 @@ def run_pipeline(
         NodeLabel.INTERFACE, NodeLabel.TYPE_ALIAS,
     )
     shared_name_index = build_name_index(graph, _SHARED_LABELS)
+    _HERITAGE_LABELS = {NodeLabel.CLASS, NodeLabel.INTERFACE}
+    heritage_name_index: dict[str, list[str]] = {}
+    for name, ids in shared_name_index.items():
+        filtered = [
+            nid for nid in ids
+            if (n := graph.get_node(nid)) is not None and n.label in _HERITAGE_LABELS
+        ]
+        if filtered:
+            heritage_name_index[name] = filtered
 
     report("Resolving relationships", 0.0)
     with ThreadPoolExecutor(max_workers=3) as pool:
@@ -159,7 +168,7 @@ def run_pipeline(
         )
         heritage_f = pool.submit(
             process_heritage, parse_data, graph,
-            name_index=shared_name_index, parallel=False, collect=True,
+            name_index=heritage_name_index, parallel=False, collect=True,
         )
         types_f = pool.submit(
             process_types, parse_data, graph,
@@ -178,8 +187,14 @@ def run_pipeline(
     _write_collected_edges(types_f.result() or [], graph)
     report("Resolving relationships", 1.0)
 
+    # Snapshot file nodes before the executor — resolve_coupling must not
+    # read from the live graph while mutation phases run on the main thread.
+    coupling_file_nodes = graph.get_nodes_by_label(NodeLabel.FILE)
+
     with ThreadPoolExecutor(max_workers=1) as pool:
-        coupling_future = pool.submit(resolve_coupling, graph, repo_path)
+        coupling_future = pool.submit(
+            resolve_coupling, graph, repo_path, file_nodes=coupling_file_nodes,
+        )
 
         report("Detecting communities", 0.0)
         result.clusters = process_communities(graph)

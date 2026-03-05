@@ -437,7 +437,12 @@ def serve(
             raise
 
     if read_only_fallback:
-        asyncio.run(mcp_main())
+        storage = _load_storage(repo_path)
+        set_storage(storage)
+        try:
+            asyncio.run(mcp_main())
+        finally:
+            storage.close()
         return
 
     if not (axon_dir / "meta.json").exists():

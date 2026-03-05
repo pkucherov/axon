@@ -25,7 +25,7 @@ from axon.core.graph.model import (
 )
 from axon.core.ingestion.parser_phase import FileParseData
 from axon.core.ingestion.resolved import ResolvedEdge
-from axon.core.ingestion.symbol_lookup import build_file_symbol_index, build_name_index, find_containing_symbol
+from axon.core.ingestion.symbol_lookup import FileSymbolIndex, build_file_symbol_index, build_name_index, find_containing_symbol
 from axon.core.parsers.base import CallInfo
 
 logger = logging.getLogger(__name__)
@@ -334,7 +334,7 @@ def _resolve_receiver_method(
 def resolve_file_calls(
     fpd: FileParseData,
     call_index: dict[str, list[str]],
-    file_sym_index: dict[str, list[tuple[str, int, int]]],
+    file_sym_index: FileSymbolIndex,
     graph: KnowledgeGraph,
 ) -> list[ResolvedEdge]:
     """Resolve all call expressions in a single file to ResolvedEdge objects.

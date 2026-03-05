@@ -123,7 +123,7 @@ def process_heritage(
     *,
     parallel: bool = False,
     collect: bool = False,
-) -> tuple[list[ResolvedEdge], list[NodePropertyPatch]] | list[ResolvedEdge] | None:
+) -> tuple[list[ResolvedEdge], list[NodePropertyPatch]] | None:
     """Create EXTENDS and IMPLEMENTS relationships from heritage tuples.
 
     For each ``(class_name, kind, parent_name)`` tuple in the parse results:
