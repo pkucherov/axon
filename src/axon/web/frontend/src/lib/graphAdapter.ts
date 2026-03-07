@@ -6,16 +6,16 @@ import type { GraphNode, GraphEdge, NodeLabel } from '@/types';
 /* ------------------------------------------------------------------ */
 
 const NODE_COLORS: Record<string, { fill: string; border: string }> = {
-  function:   { fill: '#4FC3F7', border: '#81D4FA' },
-  method:     { fill: '#7E57C2', border: '#9575CD' },
-  class:      { fill: '#FF7043', border: '#FF8A65' },
-  interface:  { fill: '#26C6DA', border: '#4DD0E1' },
-  type_alias: { fill: '#AB47BC', border: '#CE93D8' },
-  enum:       { fill: '#FFA726', border: '#FFB74D' },
-  file:       { fill: '#78909C', border: '#90A4AE' },
-  folder:     { fill: '#8D6E63', border: '#A1887F' },
-  community:  { fill: '#FFEE58', border: '#FFF176' },
-  process:    { fill: '#66BB6A', border: '#81C784' },
+  function:   { fill: '#39D353', border: '#56E06B' },  // GitHub green
+  method:     { fill: '#58A6FF', border: '#79B8FF' },  // bright blue
+  class:      { fill: '#F5A623', border: '#F7BC55' },  // warm amber
+  interface:  { fill: '#00BCD4', border: '#33D1E6' },  // cyan
+  type_alias: { fill: '#B455E0', border: '#C97AEA' },  // purple
+  enum:       { fill: '#E85D75', border: '#EE8093' },  // rose-pink
+  file:       { fill: '#8B949E', border: '#A0AAB4' },  // silver-grey
+  folder:     { fill: '#D2A35C', border: '#DEBD7E' },  // warm tan
+  community:  { fill: '#3FB950', border: '#5CC96A' },  // forest green
+  process:    { fill: '#F78166', border: '#F9A08A' },  // coral-orange
 };
 
 const DEFAULT_NODE_FILL = '#4a5a6a';
@@ -99,8 +99,8 @@ function computeLayout(graph: MultiDirectedGraph): void {
   const bfsOrder: string[] = [];
   depth.set(hubId, 0);
   const queue: string[] = [hubId];
-  while (queue.length > 0) {
-    const cur = queue.shift()!;
+  for (let qi = 0; qi < queue.length; qi++) {
+    const cur = queue[qi];
     bfsOrder.push(cur);
     const d = depth.get(cur)!;
     graph.forEachNeighbor(cur, (nb) => {

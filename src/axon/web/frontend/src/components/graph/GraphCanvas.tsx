@@ -55,6 +55,10 @@ interface VisualNode {
   spawnScale: number;
   /** 0–1 spawn alpha (nodes fade in during spawn animation) */
   spawnAlpha: number;
+  /** 0–1 dim amount: 0 = full color, 1 = darkened shade of own color */
+  dim: number;
+  /** Label size scale: 1 = normal, <1 = smaller for connected-but-not-hovered nodes */
+  labelScale: number;
 }
 
 interface VisualEdge {
@@ -69,6 +73,17 @@ interface VisualEdge {
   isArrow: boolean;
   /** Curvature offset for parallel edges. Set during visual computation. */
   curve: number;
+  /** Radius of the target node — used to stop arrow at node edge */
+  targetRadius: number;
+  /** Radius of the source node */
+  sourceRadius: number;
+}
+
+function buildNeighborSet(graph: MultiDirectedGraph, nodeId: string | null): Set<string> | null {
+  if (!nodeId) return null;
+  const neighbors = new Set<string>();
+  graph.forEachNeighbor(nodeId, (neighbor) => neighbors.add(neighbor));
+  return neighbors;
 }
 
 function getAttr(attrs: Record<string, unknown>, key: string, fallback: string): string {
@@ -76,11 +91,17 @@ function getAttr(attrs: Record<string, unknown>, key: string, fallback: string):
   return typeof v === 'string' ? v : fallback;
 }
 
+function finiteOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
 function computeVisualNodes(
   graph: MultiDirectedGraph,
   state: {
     selectedNodeId: string | null;
     hoveredNodeId: string | null;
+    selectedNeighbors: Set<string> | null;
+    hoveredNeighbors: Set<string> | null;
     highlightedNodeIds: Set<string>;
     visibleNodeTypes: Set<string>;
   },
@@ -91,9 +112,9 @@ function computeVisualNodes(
     const nodeType = (attrs.nodeType ?? '') as string;
     const node: VisualNode = {
       id,
-      x: attrs.x as number,
-      y: attrs.y as number,
-      size: (attrs.size as number) ?? 3,
+      x: finiteOr(attrs.x, 0),
+      y: finiteOr(attrs.y, 0),
+      size: finiteOr(attrs.size, 3),
       color: attrs.color as string,
       borderColor: attrs.borderColor as string,
       label: (attrs.label as string) ?? '',
@@ -101,8 +122,10 @@ function computeVisualNodes(
       highlighted: false,
       zIndex: 1,
       forceLabel: false,
-      spawnScale: (attrs._spawnScale as number) ?? 1,
-      spawnAlpha: (attrs._spawnAlpha as number) ?? 1,
+      spawnScale: finiteOr(attrs._spawnScale, 1),
+      spawnAlpha: finiteOr(attrs._spawnAlpha, 1),
+      dim: 0,
+      labelScale: 1,
     };
 
     if (!state.visibleNodeTypes.has(nodeType)) {
@@ -116,9 +139,7 @@ function computeVisualNodes(
         node.size *= 1.3;
         node.zIndex = 2;
       } else {
-        node.color = '#141a22';
-        node.borderColor = '#141a22';
-        node.label = '';
+        node.dim = 1;
         node.zIndex = 0;
       }
       if (state.hoveredNodeId && id === state.hoveredNodeId) {
@@ -130,13 +151,9 @@ function computeVisualNodes(
     }
 
     if (state.selectedNodeId && id !== state.selectedNodeId) {
-      const isNeighbor =
-        graph.hasEdge(state.selectedNodeId, id) ||
-        graph.hasEdge(id, state.selectedNodeId);
+      const isNeighbor = state.selectedNeighbors?.has(id) ?? false;
       if (!isNeighbor) {
-        node.color = '#141a22';
-        node.borderColor = '#141a22';
-        node.label = '';
+        node.dim = 1;
         node.zIndex = 0;
       } else {
         node.forceLabel = true;
@@ -158,17 +175,15 @@ function computeVisualNodes(
         node.forceLabel = true;
         node.zIndex = 3;
       } else {
-        const isNeighbor =
-          graph.hasEdge(state.hoveredNodeId, id) ||
-          graph.hasEdge(id, state.hoveredNodeId);
+        const isNeighbor = state.hoveredNeighbors?.has(id) ?? false;
         if (isNeighbor) {
           node.color = getAttr(attrs, '_saturatedColor', node.color);
           node.borderColor = getAttr(attrs, '_saturatedBorder', node.borderColor);
+          node.forceLabel = true;
+          node.labelScale = 0.45;
           node.zIndex = 2;
         } else {
-          node.color = '#1a2030';
-          node.borderColor = '#1a2030';
-          node.label = '';
+          node.dim = 1;
           node.zIndex = 0;
         }
       }
@@ -197,13 +212,23 @@ function computeVisualEdges(
   },
 ): VisualEdge[] {
   const result: VisualEdge[] = [];
+  const nodeAttrs = new Map<string, { x: number; y: number; size: number; nodeType: string }>();
+  graph.forEachNode((id, attrs) => {
+    nodeAttrs.set(id, {
+      x: finiteOr(attrs.x, 0),
+      y: finiteOr(attrs.y, 0),
+      size: finiteOr(attrs.size, 50),
+      nodeType: (attrs.nodeType ?? '') as string,
+    });
+  });
 
   graph.forEachEdge((id, attrs, source, target) => {
     const edgeType = (attrs.edgeType ?? '') as string;
-    const sourceAttrs = graph.getNodeAttributes(source);
-    const targetAttrs = graph.getNodeAttributes(target);
-    const sourceNodeType = (sourceAttrs.nodeType ?? '') as string;
-    const targetNodeType = (targetAttrs.nodeType ?? '') as string;
+    const sourceAttrs = nodeAttrs.get(source);
+    const targetAttrs = nodeAttrs.get(target);
+    if (!sourceAttrs || !targetAttrs) return;
+    const sourceNodeType = sourceAttrs.nodeType;
+    const targetNodeType = targetAttrs.nodeType;
 
     const edge: VisualEdge = {
       id,
@@ -216,6 +241,8 @@ function computeVisualEdges(
       hidden: false,
       isArrow: (attrs.type as string) === 'arrow',
       curve: 0,
+      sourceRadius: (sourceAttrs.size as number) ?? 50,
+      targetRadius: (targetAttrs.size as number) ?? 50,
     };
 
     if (!state.visibleEdgeTypes.has(edgeType)) {
@@ -244,7 +271,8 @@ function computeVisualEdges(
       if (source !== state.selectedNodeId && target !== state.selectedNodeId) {
         edge.hidden = true;
       } else {
-        edge.size = 1.2;
+        edge.size = 5.0;
+        edge.color = brightenEdgeColor(edge.color);
       }
     }
 
@@ -252,7 +280,9 @@ function computeVisualEdges(
       if (source !== state.hoveredNodeId && target !== state.hoveredNodeId) {
         edge.hidden = true;
       } else {
-        edge.size = 1.2;
+        // Connected edge: much thicker, brighter, fully opaque
+        edge.size = 5.0;
+        edge.color = brightenEdgeColor(edge.color);
       }
     }
 
@@ -284,46 +314,79 @@ const LABEL_FONT = "'JetBrains Mono', monospace";
 
 /* ---- Bezier curved edges ---- */
 
-function drawEdge(ctx: CanvasRenderingContext2D, e: VisualEdge, _zoom: number) {
+function drawEdge(
+  ctx: CanvasRenderingContext2D,
+  e: VisualEdge,
+  _zoom: number,
+  vpMinX: number, vpMinY: number, vpMaxX: number, vpMaxY: number,
+) {
   if (e.hidden) return;
+
+  // Viewport cull: skip edges entirely outside the viewport
+  const eMinX = Math.min(e.sx, e.tx) - Math.abs(e.curve);
+  const eMaxX = Math.max(e.sx, e.tx) + Math.abs(e.curve);
+  const eMinY = Math.min(e.sy, e.ty) - Math.abs(e.curve);
+  const eMaxY = Math.max(e.sy, e.ty) + Math.abs(e.curve);
+  if (eMaxX < vpMinX || eMinX > vpMaxX || eMaxY < vpMinY || eMinY > vpMaxY) return;
 
   const dx = e.tx - e.sx;
   const dy = e.ty - e.sy;
   const len = Math.sqrt(dx * dx + dy * dy);
   if (len < 1) return;
 
-  // Perpendicular unit vector for curvature
   const px = -dy / len;
   const py = dx / len;
 
-  // Control point at midpoint offset by curvature
-  const mx = (e.sx + e.tx) / 2 + px * e.curve;
-  const my = (e.sy + e.ty) / 2 + py * e.curve;
+  const arrowLen = Math.max(12, e.size * 10);
+
+  // Clip edge at node boundaries using direct geometric approach:
+  // Walk along the straight source→target direction by the node radius.
+  // This is fast, robust, and works for all edge lengths.
+  const ux = dx / len;
+  const uy = dy / len;
+
+  // Start point: offset from source center along direction to target
+  const startX = e.sx + ux * e.sourceRadius;
+  const startY = e.sy + uy * e.sourceRadius;
+
+  // End point: offset from target center back toward source
+  const endPullback = e.targetRadius + (e.isArrow ? arrowLen : 0);
+  const endX = e.tx - ux * endPullback;
+  const endY = e.ty - uy * endPullback;
+
+  // Skip if nodes are so close the clipped edge would be inverted
+  const clippedDx = endX - startX;
+  const clippedDy = endY - startY;
+  if (clippedDx * dx + clippedDy * dy < 0) return; // dot product < 0 means inverted
+
+  // Control point: project the original bezier control point
+  // onto the clipped segment proportionally
+  const clippedMx = (startX + endX) / 2 + px * e.curve;
+  const clippedMy = (startY + endY) / 2 + py * e.curve;
 
   ctx.beginPath();
-  ctx.moveTo(e.sx, e.sy);
-  ctx.quadraticCurveTo(mx, my, e.tx, e.ty);
+  ctx.moveTo(startX, startY);
+  ctx.quadraticCurveTo(clippedMx, clippedMy, endX, endY);
   ctx.strokeStyle = e.color;
   ctx.lineWidth = Math.max(0.8, e.size * 2);
   ctx.stroke();
 
   if (e.isArrow) {
-    // Arrow at the end of the curve — tangent direction at t=1
-    // For quadratic bezier, tangent at t=1 = 2*(P2 - P1) = 2*((tx,ty) - (mx,my))
-    const tdx = e.tx - mx;
-    const tdy = e.ty - my;
+    // Arrow direction: tangent at the end of the clipped curve
+    // For the quadratic bezier, tangent at t=1 = 2*(end - control)
+    const tdx = endX - clippedMx;
+    const tdy = endY - clippedMy;
     const tlen = Math.sqrt(tdx * tdx + tdy * tdy);
-    if (tlen < 1) return;
-    const ux = tdx / tlen;
-    const uy = tdy / tlen;
-    const arrowLen = Math.max(6, e.size * 5);
-    const arrowWidth = arrowLen * 0.45;
-    const ax = e.tx - ux * arrowLen;
-    const ay = e.ty - uy * arrowLen;
+    if (tlen < 0.1) return;
+    const aux = tdx / tlen;
+    const auy = tdy / tlen;
+    const arrowWidth = arrowLen * 0.5;
+    const tipX = endX + aux * arrowLen;
+    const tipY = endY + auy * arrowLen;
     ctx.beginPath();
-    ctx.moveTo(e.tx, e.ty);
-    ctx.lineTo(ax - uy * arrowWidth, ay + ux * arrowWidth);
-    ctx.lineTo(ax + uy * arrowWidth, ay - ux * arrowWidth);
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(endX - auy * arrowWidth, endY + aux * arrowWidth);
+    ctx.lineTo(endX + auy * arrowWidth, endY - aux * arrowWidth);
     ctx.closePath();
     ctx.fillStyle = e.color;
     ctx.fill();
@@ -332,22 +395,33 @@ function drawEdge(ctx: CanvasRenderingContext2D, e: VisualEdge, _zoom: number) {
 
 /* ---- Nodes with glow ---- */
 
-function drawNode(ctx: CanvasRenderingContext2D, n: VisualNode, zoom: number) {
+function drawNode(
+  ctx: CanvasRenderingContext2D,
+  n: VisualNode,
+  zoom: number,
+  vpMinX: number, vpMinY: number, vpMaxX: number, vpMaxY: number,
+) {
   if (n.hidden || n.spawnAlpha <= 0) return;
   const r = n.size * n.spawnScale;
   if (r < 0.5) return;
 
-  ctx.globalAlpha = n.spawnAlpha;
+  // Viewport cull
+  if (n.x + r < vpMinX || n.x - r > vpMaxX || n.y + r < vpMinY || n.y - r > vpMaxY) return;
 
-  // Soft glow behind the node
-  const glowRadius = r * 1.8;
-  const glow = ctx.createRadialGradient(n.x, n.y, r * 0.5, n.x, n.y, glowRadius);
-  glow.addColorStop(0, n.color + '30'); // ~19% alpha
-  glow.addColorStop(1, n.color + '00'); // transparent
-  ctx.beginPath();
-  ctx.arc(n.x, n.y, glowRadius, 0, Math.PI * 2);
-  ctx.fillStyle = glow;
-  ctx.fill();
+  const screenR = r * zoom;
+  ctx.globalAlpha = n.spawnAlpha * (1 - n.dim * 0.5);
+
+  // Soft glow: only for non-dimmed nodes when they're large enough on screen to notice
+  if (n.dim < 0.5 && screenR > 4) {
+    const glowRadius = r * 1.8;
+    const glow = ctx.createRadialGradient(n.x, n.y, r * 0.5, n.x, n.y, glowRadius);
+    glow.addColorStop(0, n.color + '30');
+    glow.addColorStop(1, n.color + '00');
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, glowRadius, 0, Math.PI * 2);
+    ctx.fillStyle = glow;
+    ctx.fill();
+  }
 
   // Highlighted ring
   if (n.highlighted) {
@@ -364,19 +438,52 @@ function drawNode(ctx: CanvasRenderingContext2D, n: VisualNode, zoom: number) {
   ctx.fillStyle = n.borderColor;
   ctx.fill();
 
-  // Inner fill with slight gradient for depth
-  const inner = ctx.createRadialGradient(
-    n.x - r * 0.2, n.y - r * 0.2, 0,
-    n.x, n.y, r * 0.82,
-  );
-  inner.addColorStop(0, lighten(n.color, 30));
-  inner.addColorStop(1, n.color);
-  ctx.beginPath();
-  ctx.arc(n.x, n.y, r * 0.82, 0, Math.PI * 2);
-  ctx.fillStyle = inner;
-  ctx.fill();
+  // Inner fill: use gradient only when large enough on screen, otherwise solid fill
+  if (screenR > 8) {
+    const inner = ctx.createRadialGradient(
+      n.x - r * 0.2, n.y - r * 0.2, 0,
+      n.x, n.y, r * 0.82,
+    );
+    inner.addColorStop(0, lighten(n.color, 30));
+    inner.addColorStop(1, n.color);
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r * 0.82, 0, Math.PI * 2);
+    ctx.fillStyle = inner;
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r * 0.82, 0, Math.PI * 2);
+    ctx.fillStyle = n.color;
+    ctx.fill();
+  }
 
   ctx.globalAlpha = 1;
+}
+
+/** Brighten an rgba edge color: boost alpha to 0.9 and lighten RGB */
+function brightenEdgeColor(color: string): string {
+  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (!m) return color;
+  const r = Math.min(255, parseInt(m[1]) + 60);
+  const g = Math.min(255, parseInt(m[2]) + 60);
+  const b = Math.min(255, parseInt(m[3]) + 60);
+  return `rgba(${r},${g},${b},0.9)`;
+}
+
+/** Mix a hex color toward dark based on dim amount (0–1) */
+function dimColor(hex: string, dim: number): string {
+  if (dim <= 0 || !hex.startsWith('#') || hex.length < 7) return hex;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  // Target: very dark version of the same hue (15% brightness)
+  const tr = Math.round(r * 0.15);
+  const tg = Math.round(g * 0.15);
+  const tb = Math.round(b * 0.15);
+  const nr = Math.round(r + (tr - r) * dim);
+  const ng = Math.round(g + (tg - g) * dim);
+  const nb = Math.round(b + (tb - b) * dim);
+  return `#${nr.toString(16).padStart(2, '0')}${ng.toString(16).padStart(2, '0')}${nb.toString(16).padStart(2, '0')}`;
 }
 
 function lighten(hex: string, amount: number): string {
@@ -409,7 +516,7 @@ function drawLabel(
     labelAlpha = Math.min(1, (screenSize - labelThreshold) / labelThreshold);
   }
 
-  const fontSize = Math.max(10, Math.min(16, 8 + n.size * 0.5)) / zoom;
+  const fontSize = (Math.max(10, Math.min(16, 8 + n.size * 0.5)) * n.labelScale) / zoom;
   ctx.font = `500 ${fontSize}px ${LABEL_FONT}`;
 
   const textX = n.x + n.size + 4 / zoom;
@@ -451,8 +558,8 @@ function computeTreeLayout(graph: MultiDirectedGraph): PositionMap {
   const layers = new Map<string, number>();
   layers.set(hubNode, 0);
   const queue: string[] = [hubNode];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  for (let qi = 0; qi < queue.length; qi++) {
+    const current = queue[qi];
     const depth = layers.get(current)!;
     graph.forEachNeighbor(current, (neighbor) => {
       if (!layers.has(neighbor)) { layers.set(neighbor, depth + 1); queue.push(neighbor); }
@@ -523,8 +630,8 @@ function computeRadialLayout(graph: MultiDirectedGraph, centerNodeId?: string | 
   const ringMap = new Map<string, number>();
   ringMap.set(centerNode, 0);
   const queue: string[] = [centerNode];
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  for (let qi = 0; qi < queue.length; qi++) {
+    const current = queue[qi];
     const currentRing = ringMap.get(current)!;
     graph.forEachNeighbor(current, (neighbor) => {
       if (!ringMap.has(neighbor)) { ringMap.set(neighbor, currentRing + 1); queue.push(neighbor); }
@@ -570,6 +677,7 @@ function animatePositions(
   duration: number,
   frameRef: React.MutableRefObject<number>,
   onComplete?: () => void,
+  onFrame?: () => void,
 ): void {
   const starts: PositionMap = new Map();
   graph.forEachNode((id, attrs) => {
@@ -587,9 +695,12 @@ function animatePositions(
       const start = starts.get(id);
       const target = targets.get(id);
       if (!start || !target) return;
-      graph.setNodeAttribute(id, 'x', start.x + (target.x - start.x) * ease);
-      graph.setNodeAttribute(id, 'y', start.y + (target.y - start.y) * ease);
+      const nextX = start.x + (target.x - start.x) * ease;
+      const nextY = start.y + (target.y - start.y) * ease;
+      graph.setNodeAttribute(id, 'x', Number.isFinite(nextX) ? nextX : start.x);
+      graph.setNodeAttribute(id, 'y', Number.isFinite(nextY) ? nextY : start.y);
     });
+    onFrame?.();
 
     if (progress < 1) {
       frameRef.current = requestAnimationFrame(tick);
@@ -640,10 +751,14 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
   const layoutAnimRef = useRef<number>(0);
   const nodesCache = useRef<VisualNode[]>([]);
   const needsRender = useRef(true);
+  const spawnAnimatingRef = useRef(false);
+  const layoutAnimatingRef = useRef(false);
   // Velocity arrays for friction-based physics (persistent across frames)
   const velocitiesRef = useRef<{ vx: Map<string, number>; vy: Map<string, number> }>({
     vx: new Map(), vy: new Map(),
   });
+  // Per-node dim amount (0=normal, 1=fully dimmed) — lerped each frame for smooth transition
+  const dimRef = useRef<Map<string, number>>(new Map());
 
   const { graphRef, loading, error } = useGraph();
 
@@ -672,27 +787,35 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
     }
 
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      renderFrameRef.current = requestAnimationFrame(render);
+      return;
+    }
+
+    const isAnimating =
+      physicsRunning.current ||
+      spawnAnimatingRef.current ||
+      layoutAnimatingRef.current;
+    if (!isAnimating && !needsRender.current) {
+      renderFrameRef.current = requestAnimationFrame(render);
+      return;
+    }
 
     // Resize canvas to match CSS size (handles DPR)
-    const rect = canvas.getBoundingClientRect();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
     const dpr = window.devicePixelRatio || 1;
-    const cw = Math.round(rect.width * dpr);
-    const ch = Math.round(rect.height * dpr);
+    const cw = Math.round(width * dpr);
+    const ch = Math.round(height * dpr);
     if (canvas.width !== cw || canvas.height !== ch) {
       canvas.width = cw;
       canvas.height = ch;
       needsRender.current = true;
     }
 
-    // --- Custom physics: velocity + heavy friction + inverse gravity + springs + Coulomb repulsion ---
-    //
-    // Key design decisions:
-    //   • Gravity is truly "inverse" — proportional to dist³ so it's negligible
-    //     when nodes are near the center and only pulls back nodes that drift far.
-    //   • Coulomb repulsion between ALL pairs pushes nodes apart at range,
-    //     preventing them from ever clustering. Falls off with distance² so it's
-    //     gentle at range but firm up close.
+    // --- Custom physics ---
+    // Skip physics entirely when all velocities are near zero (settled).
+    // Wake up when a node is dragged or store state changes.
     //   • Soft overlap repulsion (rubber-band) adds extra push when nodes breach
     //     each other's personal space — proportional to overlap depth, no snap.
     //   • Heavy friction (0.92) bleeds velocity fast → nodes settle quickly.
@@ -758,53 +881,35 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
         }
       });
 
-      // 3) Coulomb repulsion: ALL pairs push apart, force ∝ 1/dist
-      //    This keeps nodes spread out even before they overlap.
-      //    Only computed within a cutoff distance for performance.
-      const COULOMB = 800;          // repulsion constant
-      const COULOMB_CUTOFF = 600;   // ignore pairs farther than this
-      const COULOMB_CUTOFF_SQ = COULOMB_CUTOFF * COULOMB_CUTOFF;
+      // 3) Coulomb repulsion + soft overlap (single O(n²) pass)
+      const COULOMB = 800;
+      const COULOMB_CUTOFF_SQ = 360000; // 600²
+      const OVERLAP_STRENGTH = 0.5;
       for (let i = 0; i < n; i++) {
         for (let j = i + 1; j < n; j++) {
           const dx = xs[j] - xs[i];
           const dy = ys[j] - ys[i];
           const distSq = dx * dx + dy * dy;
           if (distSq > COULOMB_CUTOFF_SQ) continue;
-          const dist = Math.sqrt(distSq);
-          if (dist < 0.1) {
-            // Nearly coincident — random nudge
+          if (distSq < 0.01) {
             const angle = Math.random() * Math.PI * 2;
-            fx[i] -= Math.cos(angle) * 2;
-            fy[i] -= Math.sin(angle) * 2;
-            fx[j] += Math.cos(angle) * 2;
-            fy[j] += Math.sin(angle) * 2;
+            fx[i] -= Math.cos(angle) * 2; fy[i] -= Math.sin(angle) * 2;
+            fx[j] += Math.cos(angle) * 2; fy[j] += Math.sin(angle) * 2;
             continue;
           }
-          // Force = COULOMB / dist  (falls off with distance, strong up close)
-          const force = COULOMB / dist;
+          const dist = Math.sqrt(distSq);
           const ux = dx / dist;
           const uy = dy / dist;
-          if (!isFixed[i]) { fx[i] -= ux * force; fy[i] -= uy * force; }
-          if (!isFixed[j]) { fx[j] += ux * force; fy[j] += uy * force; }
-        }
-      }
-
-      // 4) Soft overlap repulsion (rubber-band): extra push when nodes overlap
-      //    Proportional to overlap depth — smooth ramp, no hard snap
-      const OVERLAP_STRENGTH = 0.5;
-      for (let i = 0; i < n; i++) {
-        for (let j = i + 1; j < n; j++) {
-          const dx = xs[j] - xs[i];
-          const dy = ys[j] - ys[i];
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          const minDist = 3 * rs[i] + 3 * rs[j];
-          if (dist < minDist && dist > 0.01) {
-            const overlap = minDist - dist;
-            const force = OVERLAP_STRENGTH * overlap;
-            const ux = dx / dist;
-            const uy = dy / dist;
-            if (!isFixed[i]) { fx[i] -= ux * force; fy[i] -= uy * force; }
-            if (!isFixed[j]) { fx[j] += ux * force; fy[j] += uy * force; }
+          // Coulomb
+          const cForce = COULOMB / dist;
+          if (!isFixed[i]) { fx[i] -= ux * cForce; fy[i] -= uy * cForce; }
+          if (!isFixed[j]) { fx[j] += ux * cForce; fy[j] += uy * cForce; }
+          // Soft overlap
+          const md = 3 * rs[i] + 3 * rs[j];
+          if (dist < md) {
+            const oForce = OVERLAP_STRENGTH * (md - dist);
+            if (!isFixed[i]) { fx[i] -= ux * oForce; fy[i] -= uy * oForce; }
+            if (!isFixed[j]) { fx[j] += ux * oForce; fy[j] += uy * oForce; }
           }
         }
       }
@@ -836,45 +941,46 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
         ys[i] += nvy;
       }
 
-      // HARD CONSTRAINT: no two nodes closer than sum of radii + gap.
-      // Runs AFTER all physics — overrides any force. No exceptions.
-      // 4 passes to resolve chain reactions from packed clusters.
+      // HARD CONSTRAINT: no two nodes closer than 3*r_i + 3*r_j.
+      // Pre-compute 3*r for each node. Use distSq check before sqrt.
+      // 2 passes (reduced from 4 — soft repulsion handles most cases now).
+      const r3 = new Float64Array(n);
+      for (let i = 0; i < n; i++) r3[i] = 3 * rs[i];
       const corrected = new Set<number>();
-      for (let pass = 0; pass < 4; pass++) {
+      for (let pass = 0; pass < 2; pass++) {
         for (let i = 0; i < n; i++) {
           for (let j = i + 1; j < n; j++) {
             const dx = xs[j] - xs[i];
             const dy = ys[j] - ys[i];
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            // minDist = r_i + r_j (touching) + gap of d_i + d_j = 3*r_i + 3*r_j
-            const minDist = 3 * rs[i] + 3 * rs[j];
-            if (dist < minDist) {
-              let ux: number, uy: number;
-              if (dist < 0.01) {
-                const angle = Math.random() * Math.PI * 2;
-                ux = Math.cos(angle);
-                uy = Math.sin(angle);
-              } else {
-                ux = dx / dist;
-                uy = dy / dist;
-              }
-              const correction = (minDist - dist) / 2;
-              if (!isFixed[i] && !isFixed[j]) {
-                xs[i] -= ux * correction;
-                ys[i] -= uy * correction;
-                xs[j] += ux * correction;
-                ys[j] += uy * correction;
-                corrected.add(i);
-                corrected.add(j);
-              } else if (!isFixed[i]) {
-                xs[i] -= ux * correction * 2;
-                ys[i] -= uy * correction * 2;
-                corrected.add(i);
-              } else if (!isFixed[j]) {
-                xs[j] += ux * correction * 2;
-                ys[j] += uy * correction * 2;
-                corrected.add(j);
-              }
+            const md = r3[i] + r3[j];
+            const distSq = dx * dx + dy * dy;
+            if (distSq >= md * md) continue; // fast reject
+            const dist = Math.sqrt(distSq);
+            let ux: number, uy: number;
+            if (dist < 0.01) {
+              const angle = Math.random() * Math.PI * 2;
+              ux = Math.cos(angle);
+              uy = Math.sin(angle);
+            } else {
+              ux = dx / dist;
+              uy = dy / dist;
+            }
+            const correction = (md - dist) / 2;
+            if (!isFixed[i] && !isFixed[j]) {
+              xs[i] -= ux * correction;
+              ys[i] -= uy * correction;
+              xs[j] += ux * correction;
+              ys[j] += uy * correction;
+              corrected.add(i);
+              corrected.add(j);
+            } else if (!isFixed[i]) {
+              xs[i] -= ux * correction * 2;
+              ys[i] -= uy * correction * 2;
+              corrected.add(i);
+            } else if (!isFixed[j]) {
+              xs[j] += ux * correction * 2;
+              ys[j] += uy * correction * 2;
+              corrected.add(j);
             }
           }
         }
@@ -895,11 +1001,15 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
 
     const cam = cameraRef.current;
     const state = useGraphStore.getState();
+    const selectedNeighbors = buildNeighborSet(graph, state.selectedNodeId);
+    const hoveredNeighbors = buildNeighborSet(graph, state.hoveredNodeId);
 
     // Compute visual data
     const visualNodes = computeVisualNodes(graph, {
       selectedNodeId: state.selectedNodeId,
       hoveredNodeId: state.hoveredNodeId,
+      selectedNeighbors,
+      hoveredNeighbors,
       highlightedNodeIds: state.highlightedNodeIds,
       visibleNodeTypes: state.visibleNodeTypes,
     });
@@ -910,17 +1020,35 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
       visibleEdgeTypes: state.visibleEdgeTypes,
       visibleNodeTypes: state.visibleNodeTypes,
     });
+    // Lerp per-node dim values for smooth 150ms transition
+    // dim target comes from computeVisualNodes, current value lerps toward it
+    const dimMap = dimRef.current;
+    const DIM_SPEED = 0.05; // lerp factor per frame (~400ms at 60fps)
+    let dimAnimating = false;
+    for (const node of visualNodes) {
+      const current = dimMap.get(node.id) ?? 0;
+      const target = node.dim;
+      if (Math.abs(target - current) > 0.005) dimAnimating = true;
+      const next = current + (target - current) * DIM_SPEED;
+      // Snap when very close to avoid perpetual tiny updates
+      const snapped = Math.abs(next - target) < 0.005 ? target : next;
+      dimMap.set(node.id, snapped);
+      node.dim = snapped;
+      // Apply dim to colors
+      if (snapped > 0.01) {
+        node.color = dimColor(node.color, snapped);
+        node.borderColor = dimColor(node.borderColor, snapped);
+        if (snapped > 0.5) node.label = ''; // hide label when mostly dimmed
+      }
+    }
     nodesCache.current = visualNodes;
 
     // Clear
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, cw, ch);
 
-    // Background gradient
-    const grad = ctx.createRadialGradient(cw / 2, ch / 2, 0, cw / 2, ch / 2, Math.max(cw, ch) * 0.7);
-    grad.addColorStop(0, '#0F1620');
-    grad.addColorStop(1, '#0A0E14');
-    ctx.fillStyle = grad;
+    // Background (solid fill — avoids gradient creation every frame)
+    ctx.fillStyle = '#0D1117';
     ctx.fillRect(0, 0, cw, ch);
 
     // Apply camera: translate to center, then offset, then scale
@@ -933,19 +1061,31 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
       (ch / 2) + cam.y * cam.zoom * dpr,
     );
 
+    // Compute viewport bounds in world space (for culling)
+    const halfW = (width / 2) / cam.zoom;
+    const halfH = (height / 2) / cam.zoom;
+    const vpMinX = -cam.x - halfW;
+    const vpMaxX = -cam.x + halfW;
+    const vpMinY = -cam.y - halfH;
+    const vpMaxY = -cam.y + halfH;
+
     // Draw edges
     for (const edge of visualEdges) {
-      drawEdge(ctx, edge, cam.zoom);
+      drawEdge(ctx, edge, cam.zoom, vpMinX, vpMinY, vpMaxX, vpMaxY);
     }
 
     // Draw nodes
     for (const node of visualNodes) {
-      drawNode(ctx, node, cam.zoom);
+      drawNode(ctx, node, cam.zoom, vpMinX, vpMinY, vpMaxX, vpMaxY);
     }
 
     // Draw labels — only when zoomed in enough that nodes are large on screen
     const labelThreshold = 40;
     for (const node of visualNodes) {
+      if (node.hidden) continue;
+      // Viewport cull labels too
+      if (node.x + node.size < vpMinX || node.x - node.size > vpMaxX ||
+          node.y + node.size < vpMinY || node.y - node.size > vpMaxY) continue;
       drawLabel(ctx, node, cam.zoom, labelThreshold);
     }
 
@@ -954,6 +1094,7 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
       drawMinimap(ctx, visualNodes, cam, cw, ch, dpr);
     }
 
+    needsRender.current = dimAnimating;
     renderFrameRef.current = requestAnimationFrame(render);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1022,15 +1163,18 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
           graph.setNodeAttribute(id, '_spawnAlpha', Math.min(1, t * 2)); // fade in fast
         }
       });
+      needsRender.current = true;
 
       if (elapsed < totalSpawnTime) {
         layoutAnimRef.current = requestAnimationFrame(spawnTick);
       } else {
+        spawnAnimatingRef.current = false;
         fitCameraToGraph(graph, canvas!, cameraRef);
         // Physics runs in render loop automatically
       }
     }
 
+    spawnAnimatingRef.current = true;
     layoutAnimRef.current = requestAnimationFrame(spawnTick);
 
     // Fit camera to target bounds immediately so we see the whole animation
@@ -1104,8 +1248,38 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
       if (draggedNode) {
         didDrag = true;
         const world = canvasToWorld(sx, sy);
+        const prevX = graph.getNodeAttribute(draggedNode, 'x') as number;
+        const prevY = graph.getNodeAttribute(draggedNode, 'y') as number;
         graph.setNodeAttribute(draggedNode, 'x', world.x);
         graph.setNodeAttribute(draggedNode, 'y', world.y);
+
+        // Pull connected nodes along — edges act like threads.
+        // Neighbors follow the drag movement but maintain their relative distance.
+        // They get the same displacement scaled down by proximity (closer = more pull).
+        const dragDx = world.x - prevX;
+        const dragDy = world.y - prevY;
+        const vels = velocitiesRef.current;
+        graph.forEachNeighbor(draggedNode, (nb) => {
+          if (graph.getNodeAttribute(nb, 'fixed')) return;
+          const nbx = graph.getNodeAttribute(nb, 'x') as number;
+          const nby = graph.getNodeAttribute(nb, 'y') as number;
+          const dx = world.x - nbx;
+          const dy = world.y - nby;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 1) return;
+          // Pull factor: closer neighbors follow more, farther ones follow less
+          const falloff = 1000 / (dist + 1000); // 1.0 at dist=0, 0.5 at dist=1000
+          const pull = 0.7 * falloff;
+          // Apply the drag displacement (not toward the node — just the movement delta)
+          const nx = nbx + dragDx * pull;
+          const ny = nby + dragDy * pull;
+          graph.setNodeAttribute(nb, 'x', nx);
+          graph.setNodeAttribute(nb, 'y', ny);
+          // Velocity impulse for smooth follow-through
+          vels.vx.set(nb, (vels.vx.get(nb) ?? 0) + dragDx * pull * 0.4);
+          vels.vy.set(nb, (vels.vy.get(nb) ?? 0) + dragDy * pull * 0.4);
+        });
+
         needsRender.current = true;
       } else if (isPanning) {
         didDrag = true;
@@ -1199,6 +1373,8 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
     return () => {
       cancelAnimationFrame(renderFrameRef.current);
       cancelAnimationFrame(layoutAnimRef.current);
+      spawnAnimatingRef.current = false;
+      layoutAnimatingRef.current = false;
       canvas.removeEventListener('mousedown', onMouseDown);
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('mouseup', onMouseUp);
@@ -1214,9 +1390,11 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
     if (!graph || !canvasRef.current) return;
 
     cancelAnimationFrame(layoutAnimRef.current);
+    needsRender.current = true;
 
     if (layoutMode === 'force') {
       physicsRunning.current = true;
+      layoutAnimatingRef.current = false;
     } else {
       physicsRunning.current = false;
 
@@ -1239,7 +1417,10 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
         circlePack.assign(graph, { hierarchyAttributes: ['community'], scale: 1000 });
         targets = new Map();
         graph.forEachNode((id, attrs) => {
-          targets.set(id, { x: attrs.x as number, y: attrs.y as number });
+          targets.set(id, {
+            x: finiteOr(attrs.x, 0),
+            y: finiteOr(attrs.y, 0),
+          });
         });
       } else {
         const nodeCount = graph.order;
@@ -1247,15 +1428,30 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
         circular.assign(graph, { scale: circularScale });
         targets = new Map();
         graph.forEachNode((id, attrs) => {
-          targets.set(id, { x: attrs.x as number, y: attrs.y as number });
+          targets.set(id, {
+            x: finiteOr(attrs.x, 0),
+            y: finiteOr(attrs.y, 0),
+          });
         });
       }
 
-      animatePositions(graph, targets, 500, layoutAnimRef, () => {
-        if (canvasRef.current) {
-          fitCameraToGraph(graph, canvasRef.current, cameraRef);
-        }
-      });
+      layoutAnimatingRef.current = true;
+      animatePositions(
+        graph,
+        targets,
+        500,
+        layoutAnimRef,
+        () => {
+          layoutAnimatingRef.current = false;
+          if (canvasRef.current) {
+            fitCameraToGraph(graph, canvasRef.current, cameraRef);
+          }
+          needsRender.current = true;
+        },
+        () => {
+          needsRender.current = true;
+        },
+      );
     }
   }, [layoutMode, selectedNodeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1275,10 +1471,12 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
     const graph = graphRef.current;
     const canvas = canvasRef.current;
     if (graph && canvas) fitCameraToGraph(graph, canvas, cameraRef);
+    needsRender.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleLayout = useCallback(() => {
     physicsRunning.current = !physicsRunning.current;
+    needsRender.current = true;
   }, []);
 
   /* ---------- early returns ---------- */
@@ -1337,6 +1535,7 @@ function fitCameraToGraph(
   graph.forEachNode((_id, attrs) => {
     const x = attrs.x as number;
     const y = attrs.y as number;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
     if (x < minX) minX = x;
     if (x > maxX) maxX = x;
     if (y < minY) minY = y;
