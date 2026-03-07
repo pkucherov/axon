@@ -745,7 +745,8 @@ class TestDiffEndpoint:
     def test_diff_success(
         self, mock_storage: MagicMock, tmp_path: Path
     ) -> None:
-        from dataclasses import dataclass, field as dc_field
+        from dataclasses import dataclass
+        from dataclasses import field as dc_field
 
         @dataclass
         class FakeDiffResult:
@@ -783,7 +784,8 @@ class TestDiffEndpoint:
     def test_diff_with_modified_nodes(
         self, mock_storage: MagicMock, tmp_path: Path
     ) -> None:
-        from dataclasses import dataclass, field as dc_field
+        from dataclasses import dataclass
+        from dataclasses import field as dc_field
 
         base_node = _sample_node(
             node_id="function:src/utils.py:helper",

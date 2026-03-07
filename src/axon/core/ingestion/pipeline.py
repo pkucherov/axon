@@ -28,9 +28,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from axon.config.ignore import load_gitignore
+from axon.core.embeddings.embedder import embed_graph
 from axon.core.graph.graph import KnowledgeGraph
 from axon.core.graph.model import GraphRelationship, NodeLabel
-from axon.core.embeddings.embedder import embed_graph
 from axon.core.ingestion.calls import process_calls
 from axon.core.ingestion.community import process_communities
 from axon.core.ingestion.coupling import resolve_coupling

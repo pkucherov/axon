@@ -15,7 +15,13 @@ import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Minimap } from './Minimap';
 
-/* ── Custom label renderer: dark halo + dynamic font sizing by node importance ── */
+type RenderData = Record<string, unknown>;
+
+function getColorAttr(data: RenderData, key: string, fallback: string): string {
+  const value = data[key];
+  return typeof value === 'string' ? value : fallback;
+}
+
 function drawNodeLabelWithHalo(
   context: CanvasRenderingContext2D,
   data: PartialButFor<NodeDisplayData, 'x' | 'y' | 'size' | 'label' | 'color'>,
@@ -25,28 +31,24 @@ function drawNodeLabelWithHalo(
   const font = settings.labelFont;
   const weight = settings.labelWeight;
   const color = settings.labelColor.attribute
-    ? (data as Record<string, unknown>)[settings.labelColor.attribute] as string || settings.labelColor.color || '#E6EDF3'
+    ? getColorAttr(data as RenderData, settings.labelColor.attribute, settings.labelColor.color || '#E6EDF3')
     : settings.labelColor.color;
 
-  // Dynamic font size: larger nodes (higher degree) get bigger labels
   const fontSize = Math.max(10, Math.min(18, 8 + data.size * 0.5));
 
   context.font = `${weight} ${fontSize}px ${font}`;
 
-  // Strong dark halo for clarity against any background
   context.strokeStyle = '#000000';
   context.lineWidth = 3;
   context.lineJoin = 'round';
   context.globalAlpha = 0.85;
   context.strokeText(data.label, data.x + data.size + 3, data.y + fontSize / 3);
 
-  // Fill on top
   context.fillStyle = color!;
   context.fillText(data.label, data.x + data.size + 3, data.y + fontSize / 3);
   context.globalAlpha = 1;
 }
 
-/* ── Custom hover renderer: dark tooltip instead of jarring white ── */
 function drawNodeHoverDark(
   context: CanvasRenderingContext2D,
   data: PartialButFor<NodeDisplayData, 'x' | 'y' | 'size' | 'label' | 'color'>,
@@ -57,7 +59,6 @@ function drawNodeHoverDark(
   const size = Math.max(10, Math.min(18, 8 + data.size * 0.5));
   context.font = `${weight} ${size}px ${font}`;
 
-  // Dark background pill
   context.fillStyle = '#1a2030';
   context.shadowOffsetX = 0;
   context.shadowOffsetY = 2;
@@ -92,7 +93,6 @@ function drawNodeHoverDark(
   context.shadowOffsetY = 0;
   context.shadowBlur = 0;
 
-  // Draw label with halo
   drawNodeLabelWithHalo(context, data, settings);
 }
 
@@ -102,18 +102,6 @@ interface GraphCanvasProps {
 
 type PositionMap = Map<string, { x: number; y: number }>;
 
-/**
- * Compute a hierarchical top-to-bottom tree layout.
- *
- * Uses undirected BFS from the highest-degree hub node so the graph
- * fans out into concentric layers of increasing width. This avoids the
- * flat-line bug caused by directed-edge filtering (which made ~80% of
- * nodes roots at layer 0).
- *
- * Disconnected nodes are placed on an extra bottom layer.
- * Within each layer, nodes are sorted by their `directory` attribute to
- * keep related symbols together.
- */
 function computeTreeLayout(graph: MultiDirectedGraph): PositionMap {
   const positions: PositionMap = new Map();
   const nodeIds: string[] = [];
@@ -195,17 +183,6 @@ function computeTreeLayout(graph: MultiDirectedGraph): PositionMap {
   return positions;
 }
 
-/**
- * Compute a radial layout with adaptive ring sizing.
- *
- * When a `centerNodeId` is provided (the selected node), it becomes the
- * center -- creating a true ego-graph view. Otherwise falls back to the
- * highest-degree node.
- *
- * Each ring's radius adapts to the number of nodes on it, so outer rings
- * with many nodes expand instead of packing tightly. Rings are offset by
- * half an arc-step to prevent radial stacking.
- */
 function computeRadialLayout(graph: MultiDirectedGraph, centerNodeId?: string | null): PositionMap {
   const positions: PositionMap = new Map();
   const nodeIds: string[] = [];
@@ -267,13 +244,11 @@ function computeRadialLayout(graph: MultiDirectedGraph, centerNodeId?: string | 
     const members = ringGroups.get(ring)!;
     const count = members.length;
 
-    // Radius must be large enough to fit `count` nodes without overlap.
     const circumferenceNeeded = count * 80;
     const radiusFromCount = circumferenceNeeded / (2 * Math.PI);
     const radius = Math.max(prevRadius + 150, radiusFromCount);
     prevRadius = radius;
 
-    // Offset each ring by half an arc-step to prevent radial stacking.
     const arcStep = (2 * Math.PI) / count;
     const ringOffset = (ring % 2) * (arcStep / 2);
 
@@ -289,14 +264,6 @@ function computeRadialLayout(graph: MultiDirectedGraph, centerNodeId?: string | 
   return positions;
 }
 
-/**
- * Animate node positions from their current locations to new target positions
- * over a given duration using requestAnimationFrame with ease-out cubic.
- *
- * Writes the current frame ID to `frameRef` on every tick so that
- * `cancelAnimationFrame(frameRef.current)` always cancels the latest
- * scheduled frame -- fixing rapid layout-switch glitches.
- */
 function animatePositions(
   graph: MultiDirectedGraph,
   targets: PositionMap,
@@ -419,9 +386,6 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
     if (!container || !graphRef.current) return;
     const graph = graphRef.current;
 
-    // Snapshot the current store values for the reducers. The refresh effect
-    // below triggers sigma.refresh() whenever these change, which causes
-    // Sigma to re-invoke the reducers with fresh closure values.
     const BorderedNodeProgram = createNodeBorderProgram({
       borders: [
         { size: { value: 0.06, mode: 'relative' }, color: { attribute: '_outlineColor', defaultValue: '#0a0a0a' } },
@@ -465,7 +429,6 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
           return res;
         }
 
-        // Set-based highlighting (file/folder/community/dead code).
         if (state.highlightedNodeIds.size > 0) {
           if (state.highlightedNodeIds.has(node)) {
             res.size = (res.size ?? 3) * 1.3;
@@ -504,12 +467,10 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
           res.zIndex = 3;
         }
 
-        // Focus mode: hovering restores full saturation + fades non-neighbors
         if (state.hoveredNodeId && !state.selectedNodeId) {
           if (node === state.hoveredNodeId) {
-            // Restore full saturation on hovered node — only this node gets forceLabel
-            res.color = (data as Record<string, unknown>)._saturatedColor as string || res.color;
-            res.borderColor = (data as Record<string, unknown>)._saturatedBorder as string || res.borderColor;
+            res.color = getColorAttr(data as RenderData, '_saturatedColor', res.color);
+            res.borderColor = getColorAttr(data as RenderData, '_saturatedBorder', res.borderColor);
             res.highlighted = true;
             res.forceLabel = true;
             res.zIndex = 3;
@@ -518,9 +479,8 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
               graph.hasEdge(state.hoveredNodeId, node) ||
               graph.hasEdge(node, state.hoveredNodeId);
             if (isNeighbor) {
-              // Neighbors get full saturation but NO forceLabel (prevents label pile-up)
-              res.color = (data as Record<string, unknown>)._saturatedColor as string || res.color;
-              res.borderColor = (data as Record<string, unknown>)._saturatedBorder as string || res.borderColor;
+              res.color = getColorAttr(data as RenderData, '_saturatedColor', res.color);
+              res.borderColor = getColorAttr(data as RenderData, '_saturatedBorder', res.borderColor);
               res.zIndex = 2;
             } else {
               res.color = '#1a2030';
@@ -530,8 +490,8 @@ export function GraphCanvas({ className }: GraphCanvasProps) {
             }
           }
         } else if (state.hoveredNodeId && node === state.hoveredNodeId) {
-          res.color = (data as Record<string, unknown>)._saturatedColor as string || res.color;
-          res.borderColor = (data as Record<string, unknown>)._saturatedBorder as string || res.borderColor;
+          res.color = getColorAttr(data as RenderData, '_saturatedColor', res.color);
+          res.borderColor = getColorAttr(data as RenderData, '_saturatedBorder', res.borderColor);
           res.highlighted = true;
           res.forceLabel = true;
         }

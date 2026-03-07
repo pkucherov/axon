@@ -8,6 +8,7 @@ import pytest
 from axon.core.ingestion.pipeline import PipelineResult, run_pipeline
 from axon.core.storage.kuzu_backend import KuzuBackend
 
+
 @pytest.fixture()
 def tmp_repo(tmp_path: Path) -> Path:
     """Create a small Python repository under a temporary directory.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown, Folder } from 'lucide-react';
 import { fileApi } from '@/api/client';
+import { errorMessage } from '@/lib/utils';
 import { useGraphStore } from '@/stores/graphStore';
 import type { FolderNode } from '@/types';
 import { LoadingSpinner } from '@/components/shared/LoadingSpinner';
@@ -41,7 +42,7 @@ export function FileTree() {
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(String(err));
+        if (!cancelled) setError(errorMessage(err, 'Failed to load file tree'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -122,7 +123,6 @@ export function FileTree() {
   );
 }
 
-/** Recursively filter tree, keeping ancestors of matching leaf nodes. */
 function filterNodes(nodes: FolderNode[], term: string): FolderNode[] {
   const result: FolderNode[] = [];
   for (const node of nodes) {

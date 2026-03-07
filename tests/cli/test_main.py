@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import typer
 from typer.testing import CliRunner
 
 from axon import __version__
@@ -379,7 +378,6 @@ class TestWatch:
 
 class TestRegisterInGlobalRegistry:
     def test_first_registration(self, tmp_path: Path) -> None:
-        registry = tmp_path / "registry"
         repo_path = tmp_path / "my-project"
         repo_path.mkdir()
 

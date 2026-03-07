@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 
 from axon.core.graph.graph import KnowledgeGraph
-from axon.core.graph.model import GraphNode, NodeLabel
+from axon.core.graph.model import NodeLabel
 
 
 def build_name_index(

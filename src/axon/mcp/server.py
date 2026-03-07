@@ -18,9 +18,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from collections.abc import Callable
 from typing import Iterator
 
 from mcp.server import Server

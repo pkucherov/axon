@@ -20,7 +20,12 @@ from axon.core.graph.model import (
 )
 from axon.core.ingestion.parser_phase import FileParseData
 from axon.core.ingestion.resolved import ResolvedEdge
-from axon.core.ingestion.symbol_lookup import FileSymbolIndex, build_file_symbol_index, build_name_index, find_containing_symbol
+from axon.core.ingestion.symbol_lookup import (
+    FileSymbolIndex,
+    build_file_symbol_index,
+    build_name_index,
+    find_containing_symbol,
+)
 
 logger = logging.getLogger(__name__)
 

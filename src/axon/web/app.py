@@ -12,14 +12,24 @@ from pathlib import Path
 from typing import AsyncIterator
 
 import httpx
-from fastapi import FastAPI
-from fastapi import Request
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.routing import Route
 
+from axon.core.storage.kuzu_backend import KuzuBackend
+from axon.mcp.server import create_streamable_http_app
 from axon.runtime import AxonRuntime
+from axon.web.routes.analysis import router as analysis_router
+from axon.web.routes.cypher import router as cypher_router
+from axon.web.routes.diff import router as diff_router
+from axon.web.routes.events import router as events_router
+from axon.web.routes.files import router as files_router
+from axon.web.routes.graph import router as graph_router
+from axon.web.routes.host import router as host_router
+from axon.web.routes.processes import router as processes_router
+from axon.web.routes.search import router as search_router
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +59,6 @@ def create_app(
     Returns:
         A ready-to-run FastAPI instance.
     """
-    from axon.core.storage.kuzu_backend import KuzuBackend
-    from axon.mcp.server import create_streamable_http_app
-
     if runtime is None:
         storage = KuzuBackend()
         storage.initialize(db_path, read_only=True)
@@ -110,16 +117,6 @@ def create_app(
         allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Content-Type", "Accept"],
     )
-
-    from axon.web.routes.analysis import router as analysis_router
-    from axon.web.routes.cypher import router as cypher_router
-    from axon.web.routes.diff import router as diff_router
-    from axon.web.routes.events import router as events_router
-    from axon.web.routes.files import router as files_router
-    from axon.web.routes.graph import router as graph_router
-    from axon.web.routes.host import router as host_router
-    from axon.web.routes.processes import router as processes_router
-    from axon.web.routes.search import router as search_router
 
     app.include_router(graph_router, prefix="/api")
     app.include_router(host_router, prefix="/api")

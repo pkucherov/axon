@@ -24,7 +24,6 @@ from axon.core.graph.model import (
     GraphRelationship,
     NodeLabel,
     RelType,
-    generate_id,
 )
 from axon.core.ingestion.resolved import ResolvedEdge
 
@@ -56,7 +55,7 @@ def parse_git_log(
         "git",
         "log",
         "--name-only",
-        f'--pretty=format:COMMIT:%H',
+        '--pretty=format:COMMIT:%H',
         f"--since={since_months} months ago",
     ]
 

@@ -7,15 +7,15 @@ from pathlib import Path
 import pytest
 
 from axon.core.graph.graph import KnowledgeGraph
+from axon.core.graph.model import GraphNode, GraphRelationship, NodeLabel, RelType
 from axon.core.ingestion.pipeline import reindex_files, run_pipeline
+from axon.core.ingestion.walker import FileEntry, read_file
 from axon.core.ingestion.watcher import (
-    _reindex_files,
-    _get_head_sha,
     _compute_dirty_node_ids,
+    _get_head_sha,
+    _reindex_files,
     _run_incremental_global_phases,
 )
-from axon.core.graph.model import GraphNode, GraphRelationship, NodeLabel, RelType
-from axon.core.ingestion.walker import FileEntry, read_file
 from axon.core.storage.kuzu_backend import KuzuBackend
 
 

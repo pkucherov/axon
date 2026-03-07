@@ -12,6 +12,7 @@ from axon.core.ingestion.coupling import (
     process_coupling,
 )
 
+
 @pytest.fixture()
 def graph() -> KnowledgeGraph:
     """Return a KnowledgeGraph pre-populated with File nodes.

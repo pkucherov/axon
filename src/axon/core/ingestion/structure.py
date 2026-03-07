@@ -18,26 +18,9 @@ from axon.core.graph.model import (
 )
 from axon.core.ingestion.walker import FileEntry
 
+
 def process_structure(files: list[FileEntry], graph: KnowledgeGraph) -> None:
-    """Build File/Folder nodes and CONTAINS relationships from a list of files.
-
-    For every file entry a :pyclass:`NodeLabel.FILE` node is created.  Every
-    unique directory that appears in any file path produces a
-    :pyclass:`NodeLabel.FOLDER` node.  Parent-child folder relationships and
-    folder-to-file relationships are expressed as :pyclass:`RelType.CONTAINS`
-    edges.
-
-    Runs in two passes:
-      1. Collect all unique folder paths from file entries.
-      2. Create all nodes (folders + files) and edges (CONTAINS) in one loop each.
-
-    Args:
-        files: File entries to process.  Each entry carries the relative path,
-            raw content, and detected language.
-        graph: The knowledge graph to populate.  Nodes and relationships are
-            **added** (existing content is not removed).
-    """
-    # Pass 1: collect unique folder paths.
+    """Build File/Folder nodes and CONTAINS relationships from a list of files."""
     folder_paths: set[str] = set()
     for file_info in files:
         pure = PurePosixPath(file_info.path)
