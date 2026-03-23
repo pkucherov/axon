@@ -10,7 +10,7 @@
 
 ## Phases
 
-- [ ] **Phase 1: C# Parser Foundation** - Implement tree-sitter-based C# parser; establish parser pattern for downstream phases
+- [x] **Phase 1: C# Parser Foundation** - Implement tree-sitter-based C# parser; establish parser pattern for downstream phases (completed 2026-03-23)
 - [ ] **Phase 2: AngelScript Binding Spike** - Research and build/vendor custom Python binding for tree-sitter-angelscript; validate grammar capability
 - [ ] **Phase 3: UE5 C++ Parser & Macro Extraction** - Implement C++ parser with UCLASS/UFUNCTION/UPROPERTY metadata extraction; highest complexity and risk
 - [ ] **Phase 4: AngelScript Parser Implementation** - Implement AngelScript parser reusing C++ patterns; depends on Phase 2 binding availability
@@ -36,12 +36,12 @@
 4. User can see property accessors (get/set) represented as Method nodes within their parent class
 5. Property accessors are correctly attributed to their containing class, avoiding duplication
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Infrastructure: pyproject.toml, languages.py, SymbolInfo.properties, graph wiring, test scaffold
 - [x] 01-02-PLAN.md — CSharpParser implementation: symbol extraction, heritage, attributes, using directives, resolve_csharp_imports
-- [ ] 01-03-PLAN.md — Pipeline registration: _PARSER_FACTORIES, _qualify_collisions hook, ruff lint, full suite green
+- [x] 01-03-PLAN.md — Pipeline registration: _PARSER_FACTORIES, _qualify_collisions hook, ruff lint, full suite green
 
 ---
 
@@ -147,7 +147,7 @@ Plans:
 
 | Phase | Goal | Requirements | Status | Completed |
 |-------|------|--------------|--------|-----------|
-| 1. C# Parser Foundation | Parser pattern + symbol extraction | 2/3 | In Progress|  |
+| 1. C# Parser Foundation | Parser pattern + symbol extraction | 3/3 | Complete   | 2026-03-23 |
 | 2. AngelScript Binding Spike | Binding research + validation | 1 | Not started | — |
 | 3. UE5 C++ Parser & Macro Extraction | Macro extraction + parsing | 9 | Not started | — |
 | 4. AngelScript Parser Implementation | Parser + UE5 annotations | 4 | Not started | — |
