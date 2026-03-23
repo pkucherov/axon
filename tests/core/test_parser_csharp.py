@@ -2,6 +2,7 @@
 
 Covers INFRA-01, INFRA-05, CS-01, CS-02, CS-03, CS-04.
 Wave 0: stubs intentionally fail until Plan 02 implements CSharpParser.
+Plan 03: adds pipeline integration tests (CS-02 import resolution, D-05 collision detection).
 """
 
 from __future__ import annotations
@@ -229,3 +230,150 @@ class TestProperties:
         result = parser.parse(_PROPERTY_CS, "Entity.cs")
         id_prop = next(s for s in result.symbols if s.name == "Id" and s.kind == "method")
         assert id_prop.class_name == "Entity"
+
+
+# ── Pipeline Integration (Plan 03) ──────────────────────────────────────────
+
+
+class TestPipelineRegistration:
+    def test_csharp_in_parser_factories(self):
+        """get_parser('csharp') must return a CSharpParser without ValueError."""
+        from axon.core.ingestion.parser_phase import get_parser
+
+        parser = get_parser("csharp")
+        assert isinstance(parser, CSharpParser)
+
+    def test_parser_factories_key_exists(self):
+        """_PARSER_FACTORIES dict must contain 'csharp' key."""
+        from axon.core.ingestion.parser_phase import _PARSER_FACTORIES
+
+        assert "csharp" in _PARSER_FACTORIES
+
+    def test_get_parser_error_message_includes_csharp(self):
+        """ValueError for unknown language should mention 'csharp' in supported list."""
+        from axon.core.ingestion.parser_phase import get_parser
+
+        with pytest.raises(ValueError, match="csharp"):
+            get_parser("cobol")
+
+
+class TestQualifyCollisions:
+    def test_qualify_collisions_empty_list(self):
+        """_qualify_collisions must run without error on empty list."""
+        from axon.core.ingestion.parser_phase import _qualify_collisions
+
+        _qualify_collisions([])  # should not raise
+
+    def test_qualify_collisions_single_csharp_file_no_rename(self):
+        """If only one C# file defines 'Foo', the name is not qualified."""
+        from axon.core.ingestion.parser_phase import _qualify_collisions
+        from axon.core.parsers.base import ParseResult
+
+        sym = SymbolInfo(
+            name="Foo",
+            kind="class",
+            start_line=1,
+            end_line=5,
+            content="class Foo {}",
+            properties={"cs_namespace": "MyApp"},
+        )
+        pr = ParseResult()
+        pr.symbols.append(sym)
+
+        class FakePD:
+            language = "csharp"
+            parse_result = pr
+
+        _qualify_collisions([FakePD()])
+        assert sym.name == "Foo"  # unchanged — no collision
+
+    def test_qualify_collisions_two_files_same_name_get_qualified(self):
+        """Two C# files both defining 'Foo' must result in qualified names."""
+        from axon.core.ingestion.parser_phase import _qualify_collisions
+        from axon.core.parsers.base import ParseResult
+
+        sym1 = SymbolInfo(
+            name="Foo",
+            kind="class",
+            start_line=1,
+            end_line=5,
+            content="class Foo {}",
+            properties={"cs_namespace": "MyApp"},
+        )
+        sym2 = SymbolInfo(
+            name="Foo",
+            kind="class",
+            start_line=1,
+            end_line=5,
+            content="class Foo {}",
+            properties={"cs_namespace": "OtherApp"},
+        )
+        pr1, pr2 = ParseResult(), ParseResult()
+        pr1.symbols.append(sym1)
+        pr2.symbols.append(sym2)
+
+        class FakePD:
+            def __init__(self, pr: ParseResult) -> None:
+                self.language = "csharp"
+                self.parse_result = pr
+
+        _qualify_collisions([FakePD(pr1), FakePD(pr2)])
+        assert sym1.name == "MyApp.Foo"
+        assert sym2.name == "OtherApp.Foo"
+
+    def test_qualify_collisions_non_csharp_files_unaffected(self):
+        """Python/TS files must not be touched by collision detection."""
+        from axon.core.ingestion.parser_phase import _qualify_collisions
+        from axon.core.parsers.base import ParseResult
+
+        sym = SymbolInfo(
+            name="Foo",
+            kind="class",
+            start_line=1,
+            end_line=5,
+            content="class Foo: pass",
+        )
+        pr = ParseResult()
+        pr.symbols.append(sym)
+
+        class FakePD:
+            language = "python"
+            parse_result = pr
+
+        _qualify_collisions([FakePD()])
+        assert sym.name == "Foo"  # non-C# symbol untouched
+
+    def test_qualify_collisions_only_class_and_interface_kinds(self):
+        """Only 'class' and 'interface' symbols are subject to collision detection."""
+        from axon.core.ingestion.parser_phase import _qualify_collisions
+        from axon.core.parsers.base import ParseResult
+
+        method1 = SymbolInfo(
+            name="DoWork",
+            kind="method",
+            start_line=1,
+            end_line=3,
+            content="void DoWork() {}",
+            properties={"cs_namespace": "A"},
+        )
+        method2 = SymbolInfo(
+            name="DoWork",
+            kind="method",
+            start_line=1,
+            end_line=3,
+            content="void DoWork() {}",
+            properties={"cs_namespace": "B"},
+        )
+        pr1, pr2 = ParseResult(), ParseResult()
+        pr1.symbols.append(method1)
+        pr2.symbols.append(method2)
+
+        class FakePD:
+            def __init__(self, pr: ParseResult) -> None:
+                self.language = "csharp"
+                self.parse_result = pr
+
+        _qualify_collisions([FakePD(pr1), FakePD(pr2)])
+        # Methods with same name should NOT be renamed
+        assert method1.name == "DoWork"
+        assert method2.name == "DoWork"
