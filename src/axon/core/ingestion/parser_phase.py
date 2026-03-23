@@ -25,6 +25,7 @@ from axon.core.graph.model import (
 )
 from axon.core.ingestion.walker import FileEntry
 from axon.core.parsers.base import LanguageParser, ParseResult
+from axon.core.parsers.csharp_lang import CSharpParser, resolve_csharp_imports
 from axon.core.parsers.python_lang import PythonParser
 from axon.core.parsers.typescript import TypeScriptParser
 
@@ -45,6 +46,7 @@ _PARSER_FACTORIES: dict[str, Callable[[], LanguageParser]] = {
     "typescript": lambda: TypeScriptParser(dialect="typescript"),
     "tsx": lambda: TypeScriptParser(dialect="tsx"),
     "javascript": lambda: TypeScriptParser(dialect="javascript"),
+    "csharp": CSharpParser,
 }
 
 @dataclass
@@ -57,6 +59,34 @@ class FileParseData:
 
 _PARSER_CACHE: dict[str, LanguageParser] = {}
 _PARSER_CACHE_LOCK = threading.Lock()
+
+
+def _qualify_collisions(all_parse_data: list[FileParseData]) -> None:
+    """Qualify C# symbol names that collide across files.
+
+    If two or more C# files define a class/interface with the same simple name,
+    both are renamed to their fully-qualified form (namespace.SimpleName).
+    Mutates SymbolInfo.name in place, before graph nodes are created.
+
+    Only applies to class and interface symbols. Uses the cs_namespace property
+    stored by CSharpParser. Non-C# files are unaffected.
+    """
+    from collections import Counter
+
+    csharp_symbols = [
+        sym
+        for pd in all_parse_data
+        if pd.language == "csharp"
+        for sym in pd.parse_result.symbols
+        if sym.kind in ("class", "interface")
+    ]
+    name_counts = Counter(sym.name for sym in csharp_symbols)
+    for sym in csharp_symbols:
+        if name_counts[sym.name] > 1:
+            ns = (sym.properties or {}).get("cs_namespace", "")
+            if ns:
+                sym.name = f"{ns}.{sym.name}"
+
 
 def get_parser(language: str) -> LanguageParser:
     """Return the appropriate tree-sitter parser for *language*.
@@ -85,7 +115,7 @@ def get_parser(language: str) -> LanguageParser:
         if factory is None:
             raise ValueError(
                 f"Unsupported language {language!r}. "
-                f"Expected one of: python, typescript, tsx, javascript"
+                f"Expected one of: python, typescript, tsx, javascript, csharp"
             )
 
         parser = factory()
@@ -148,6 +178,10 @@ def process_parsing(
                 files,
             )
         )
+
+    # C#-specific post-parse hooks (D-03, D-05, D-06)
+    _qualify_collisions(all_parse_data)
+    resolve_csharp_imports(all_parse_data)
 
     for file_entry, parse_data in zip(files, all_parse_data):
         file_id = generate_id(NodeLabel.FILE, file_entry.path)
