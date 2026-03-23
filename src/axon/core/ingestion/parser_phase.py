@@ -182,6 +182,8 @@ def process_parsing(
                 props["decorators"] = symbol.decorators
             if symbol.kind == "class" and symbol.name in class_bases:
                 props["bases"] = class_bases[symbol.name]
+            if symbol.properties:
+                props.update(symbol.properties)
 
             is_exported = symbol.name in exported_names
 
