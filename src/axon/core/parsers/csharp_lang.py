@@ -17,7 +17,6 @@ import tree_sitter_c_sharp as tscsharp
 from tree_sitter import Language, Node, Parser
 
 from axon.core.parsers.base import (
-    CallInfo,
     ImportInfo,
     LanguageParser,
     ParseResult,
@@ -343,7 +342,7 @@ class CSharpParser(LanguageParser):
         Forms:
         - Plain:  ``using System.Collections;``             → module="System.Collections"
         - Static: ``using static System.Math;``             → module="System.Math"
-        - Alias:  ``using MyAlias = Some.Namespace;``       → module="Some.Namespace", alias="MyAlias"
+        - Alias:  ``using MyAlias = Some.Namespace;``  → module="Some.Namespace", alias="MyAlias"
         """
         has_alias = any(c.type == "=" for c in node.children)
         alias_name = ""
