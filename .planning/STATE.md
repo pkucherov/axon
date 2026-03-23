@@ -3,12 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-23T20:42:27.137Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-03-23T20:55:22.794Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
 ---
 
 # State — Axon Language Extension: C#, UE5 C++, AngelScript
@@ -38,7 +39,7 @@ progress:
 ## Current Position
 
 Phase: 01 (c-parser-foundation) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -102,6 +103,15 @@ Plan: 2 of 3
    - All language parsers store metadata (cs_namespace, cs_attributes, ue_specifiers) via this field
    - `parser_phase.py` merges `symbol.properties` into `GraphNode.properties` generically
 
+8. **C# property nodes use kind='method'** (locked in Plan 01-02, per D-04)
+   - One Method node per property declaration; no per-accessor nodes
+   - All property forms (auto, read-only, expression-bodied) follow the same pattern
+   - class_name set to the owning class
+
+9. **resolve_csharp_imports uses duck-typed list parameter** (locked in Plan 01-02)
+   - `all_parse_data: list` (not `list[FileParseData]`) to avoid circular import with parser_phase.py
+   - Operates on objects with .language, .file_path, .parse_result attributes
+
 ### Research Risks (Tracked)
 
 **High Priority:**
@@ -125,7 +135,7 @@ Plan: 2 of 3
 
 ### Work in Progress
 
-Plan 02 (01-02): CSharpParser implementation — Wave 0 tests ready.
+Plan 03 (01-03): C# parser integration with pipeline — next.
 
 ### Completed Work
 
@@ -135,10 +145,10 @@ Plan 02 (01-02): CSharpParser implementation — Wave 0 tests ready.
 - [x] Success criteria derived for all phases
 - [x] 100% requirement coverage validated
 - [x] Plan 01-01: Infrastructure foundation — tree-sitter-c-sharp/cpp installed, .cs registered, SymbolInfo.properties added, Wave 0 test scaffold created (commits 3255c18, d33f70b)
+- [x] Plan 01-02: CSharpParser implementation — all 21 tests green; CS-01, CS-02, CS-03, CS-04 complete (commit 93ef1b9)
 
 ### Pending
 
-- [ ] Plan 01-02: CSharpParser implementation (21 tests to make green)
 - [ ] Plan 01-03: C# parser integration with pipeline
 - [ ] Phase 2 planning (AngelScript binding spike)
 - [ ] Phase 3 planning (UE5 C++ parser + macro extraction)
@@ -148,10 +158,10 @@ Plan 02 (01-02): CSharpParser implementation — Wave 0 tests ready.
 
 ## Session Continuity
 
-**Last session focus:** Plan 01-01 executed — infrastructure foundation complete
-**Stopped at:** Completed 01-01-PLAN.md
-**Next session focus:** Plan 01-02 — implement CSharpParser in csharp_lang.py to satisfy 21 failing tests
-**Context preserved in:** ROADMAP.md (structure), STATE.md (decisions), REQUIREMENTS.md (traceability), 01-01-SUMMARY.md
+**Last session focus:** Plan 01-02 executed — CSharpParser implementation complete (21/21 tests green)
+**Stopped at:** Completed 01-02-PLAN.md
+**Next session focus:** Plan 01-03 — wire CSharpParser into parser_phase.py; register in _PARSER_FACTORIES; call resolve_csharp_imports after parallel parse
+**Context preserved in:** ROADMAP.md (structure), STATE.md (decisions), REQUIREMENTS.md (traceability), 01-01-SUMMARY.md, 01-02-SUMMARY.md
 
 **For future sessions:**
 

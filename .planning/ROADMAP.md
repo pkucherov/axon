@@ -36,11 +36,11 @@
 4. User can see property accessors (get/set) represented as Method nodes within their parent class
 5. Property accessors are correctly attributed to their containing class, avoiding duplication
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 01-01-PLAN.md — Infrastructure: pyproject.toml, languages.py, SymbolInfo.properties, graph wiring, test scaffold
-- [ ] 01-02-PLAN.md — CSharpParser implementation: symbol extraction, heritage, attributes, using directives, resolve_csharp_imports
+- [x] 01-02-PLAN.md — CSharpParser implementation: symbol extraction, heritage, attributes, using directives, resolve_csharp_imports
 - [ ] 01-03-PLAN.md — Pipeline registration: _PARSER_FACTORIES, _qualify_collisions hook, ruff lint, full suite green
 
 ---
@@ -147,7 +147,7 @@ Plans:
 
 | Phase | Goal | Requirements | Status | Completed |
 |-------|------|--------------|--------|-----------|
-| 1. C# Parser Foundation | Parser pattern + symbol extraction | 1/3 | In Progress|  |
+| 1. C# Parser Foundation | Parser pattern + symbol extraction | 2/3 | In Progress|  |
 | 2. AngelScript Binding Spike | Binding research + validation | 1 | Not started | — |
 | 3. UE5 C++ Parser & Macro Extraction | Macro extraction + parsing | 9 | Not started | — |
 | 4. AngelScript Parser Implementation | Parser + UE5 annotations | 4 | Not started | — |

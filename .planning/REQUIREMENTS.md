@@ -13,10 +13,10 @@
 
 ### C# Parser
 
-- [ ] **CS-01**: User can index a C# file and see Function, Method, Class, and Interface nodes in the graph
-- [ ] **CS-02**: User can see IMPORTS edges between .cs files based on `using` directive resolution
-- [ ] **CS-03**: User can see EXTENDS/IMPLEMENTS edges between C# classes and interfaces
-- [ ] **CS-04**: C# properties (get/set accessors) are extracted as Method nodes with their parent class set
+- [x] **CS-01**: User can index a C# file and see Function, Method, Class, and Interface nodes in the graph
+- [x] **CS-02**: User can see IMPORTS edges between .cs files based on `using` directive resolution
+- [x] **CS-03**: User can see EXTENDS/IMPLEMENTS edges between C# classes and interfaces
+- [x] **CS-04**: C# properties (get/set accessors) are extracted as Method nodes with their parent class set
 - [ ] **CS-05**: Unity lifecycle methods (Start, Update, Awake, LateUpdate, FixedUpdate, OnDestroy, OnEnable, OnDisable, OnTriggerEnter, OnCollisionEnter, OnCollisionExit, OnTriggerExit, Reset, OnValidate, and the 10 others) are never flagged as dead code
 - [ ] **CS-06**: C# partial classes spread across multiple files are merged into a single Class node (or their methods attributed to a common class_name) without duplicating the class node
 
@@ -79,10 +79,10 @@
 | INFRA-04 | Phase 6 | Pending |
 | INFRA-05 | Phase 1 | Complete |
 | INFRA-06 | Phase 2 | Pending |
-| CS-01 | Phase 1 | Pending |
-| CS-02 | Phase 1 | Pending |
-| CS-03 | Phase 1 | Pending |
-| CS-04 | Phase 1 | Pending |
+| CS-01 | Phase 1 | Complete |
+| CS-02 | Phase 1 | Complete |
+| CS-03 | Phase 1 | Complete |
+| CS-04 | Phase 1 | Complete |
 | CS-05 | Phase 5 | Pending |
 | CS-06 | Phase 5 | Pending |
 | CPP-01 | Phase 3 | Pending |
