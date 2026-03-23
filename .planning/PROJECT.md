@@ -25,7 +25,8 @@ AI agents and developers can navigate, search, and understand Unreal Engine 5 co
 
 ### Active
 
-- [ ] C# parser: extract functions, methods, classes, interfaces, properties from .cs files (tree-sitter-c-sharp)
+- ✓ C# parser: extract functions, methods, classes, interfaces, properties from .cs files (tree-sitter-c-sharp) — Validated in Phase 01: C# Foundation
+- ✓ All three languages registered in languages.py and parser_phase.py (.cs extension, CSharpParser in _PARSER_FACTORIES) — Validated in Phase 01: C# Foundation
 - [ ] C# Unity-awareness: detect MonoBehaviour subclasses, [SerializeField]/[Header]/[RequireComponent] attributes as node metadata; Unity lifecycle methods (Start, Update, Awake, etc.) exempt from dead-code
 - [ ] C# general .NET support: works on non-Unity codebases without Unity-specific assumptions
 - [ ] UE5 C++ parser: extract functions, methods, classes from .h/.cpp files (tree-sitter-cpp)
@@ -37,7 +38,7 @@ AI agents and developers can navigate, search, and understand Unreal Engine 5 co
 - [ ] AngelScript UE5 integration awareness: UCLASS/UFUNCTION equivalents in AS syntax; mixin classes; UE-style inheritance
 - [ ] Inheritance edges for all three languages: EXTENDS/IMPLEMENTS relationships fed into dead-code and heritage phases
 - [ ] Dead-code exemptions updated: UE5 Blueprint-exposed functions, Unity lifecycle methods, and AngelScript UE-annotated functions are never flagged dead
-- [ ] All three languages registered in languages.py and parser_phase.py with correct file extension mappings (.cs, .h, .cpp, .as, .Build.cs)
+- [ ] Remaining two languages (.h/.cpp, .as) registered in languages.py and parser_phase.py with correct file extension mappings
 
 ### Out of Scope
 
@@ -67,7 +68,7 @@ A real UE5/AngelScript repository is available for validation throughout develop
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| tree-sitter for C# and C++ | Consistent with existing parser system; grammars available on PyPI | — Pending |
+| tree-sitter for C# and C++ | Consistent with existing parser system; grammars available on PyPI | Confirmed — tree-sitter-c-sharp 0.23.1, tree-sitter-cpp 0.23.4 installed |
 | UCLASS/UFUNCTION as node metadata (not graph nodes) | Keeps graph model simple; reflection data queryable via node properties | — Pending |
 | MODULE as a new NodeLabel | Modules are architectural units with real dependency edges; worth first-class status | — Pending |
 | UE5 base class registry in dead_code.py | Avoids false positives without requiring full type resolution | — Pending |
@@ -93,4 +94,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-23 after initialization*
+*Last updated: 2026-03-23 after Phase 01 (C# Parser Foundation) completion*
