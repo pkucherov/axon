@@ -4,11 +4,11 @@
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Register C# language in `languages.py` with `.cs` extension mapping
+- [x] **INFRA-01**: Register C# language in `languages.py` with `.cs` extension mapping
 - [ ] **INFRA-02**: Register C++ language in `languages.py` with `.h` and `.cpp` extension mappings
 - [ ] **INFRA-03**: Register AngelScript language in `languages.py` with `.as` extension mapping
 - [ ] **INFRA-04**: Register `.Build.cs` files as a distinct parseable type (e.g., `csharp-build`) in `languages.py`
-- [ ] **INFRA-05**: Add `tree-sitter-c-sharp` and `tree-sitter-cpp` as dependencies in `pyproject.toml`
+- [x] **INFRA-05**: Add `tree-sitter-c-sharp` and `tree-sitter-cpp` as dependencies in `pyproject.toml`
 - [ ] **INFRA-06**: Build or vendor a Python binding for `Relrin/tree-sitter-angelscript` and integrate it into the project
 
 ### C# Parser
@@ -73,11 +73,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 3 | Pending |
 | INFRA-03 | Phase 4 | Pending |
 | INFRA-04 | Phase 6 | Pending |
-| INFRA-05 | Phase 1 | Pending |
+| INFRA-05 | Phase 1 | Complete |
 | INFRA-06 | Phase 2 | Pending |
 | CS-01 | Phase 1 | Pending |
 | CS-02 | Phase 1 | Pending |

@@ -1,8 +1,21 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: unknown
+last_updated: "2026-03-23T20:42:27.137Z"
+progress:
+  total_phases: 6
+  completed_phases: 0
+  total_plans: 3
+  completed_plans: 1
+---
+
 # State — Axon Language Extension: C#, UE5 C++, AngelScript
 
 **Milestone:** v1 Language Support
 **Created:** 2026-03-23
-**Last Updated:** 2026-03-23
+**Last Updated:** 2026-03-23T20:42Z
 
 ---
 
@@ -10,9 +23,10 @@
 
 **Core Value:** AI agents and developers can navigate, search, and understand Unreal Engine 5 and Unity codebases with correct UE5 macro semantics, module boundaries, Blueprint exposure, and lifecycle method awareness surfaced in the code intelligence graph.
 
-**Current Focus:** Foundation phases (1–3) establish parser infrastructure and UE5 awareness framework.
+**Current Focus:** Phase 01 — c-parser-foundation
 
 **Constraints:**
+
 - Tech stack: tree-sitter parsers (consistent with existing Python/TypeScript)
 - Parser protocol: must implement LanguageParser and emit ParseResult dataclass
 - Graph model: new node/relationship types in model.py; KuzuDB schema automatic
@@ -23,37 +37,15 @@
 
 ## Current Position
 
-**Phase:** Pre-execution (roadmap created, awaiting planning)
-**Plan:** None active
-**Status:** Ready for Phase 1 planning
-**Progress:** 0/29 requirements complete
-
-```
-Roadmap Timeline
-================
-
-[1: C# Foundation]
-       │
-       ├─→ [2: AngelScript Binding] (parallel)
-       │
-       ├─→ [3: UE5 C++ Parser]
-       │       │
-       │       └─→ [4: AngelScript Parser]
-       │       └─→ [5: Dead-Code Exemptions]
-       │
-       └─→ [6: Module Nodes & Validation]
-
-Current: START
-Next: Phase 1
-```
-
----
+Phase: 01 (c-parser-foundation) — EXECUTING
+Plan: 2 of 3
 
 ## Performance Metrics
 
 **Test Coverage Target:** 90% on core modules (inherited from existing baseline of 818 tests, 3505 stmts)
 
 **Expected new test files:**
+
 - `tests/core/test_parser_csharp.py` — 80+ tests for C# parser
 - `tests/core/test_parser_cpp_ue5.py` — 100+ tests for UE5 C++ parser (macro extraction focus)
 - `tests/core/test_parser_angelscript.py` — 80+ tests for AngelScript parser
@@ -63,6 +55,7 @@ Next: Phase 1
 **Estimated new lines of test code:** 300+ tests, ~3000 lines
 
 **Coverage by module (post-completion):**
+
 - `csharp_parser.py`: Target 90%
 - `cpp_ue5_parser.py`: Target 90%
 - `angelscript_parser.py`: Target 90%
@@ -100,14 +93,25 @@ Next: Phase 1
    - MODULE node type added late in milestone (low risk if deferred to v2)
    - Enables v1 to ship without architectural components
 
+6. **tree-sitter-c-sharp dependency: base package only** (locked in Plan 01-01)
+   - Do NOT use `tree-sitter-c-sharp[core]` extra — it pins `tree-sitter~=0.22` conflicting with `tree-sitter>=0.25.0`
+   - Use `"tree-sitter-c-sharp>=0.23.0"` without extras
+
+7. **SymbolInfo.properties pattern established** (locked in Plan 01-01)
+   - `properties: dict = field(default_factory=dict)` — keyword field, fully backward-compatible
+   - All language parsers store metadata (cs_namespace, cs_attributes, ue_specifiers) via this field
+   - `parser_phase.py` merges `symbol.properties` into `GraphNode.properties` generically
+
 ### Research Risks (Tracked)
 
 **High Priority:**
+
 - **Phase 2:** AngelScript grammar availability and Python binding feasibility — spike validates
 - **Phase 3:** UE5 macro extraction edge cases (multiline, nested parentheses) — regex tested on real headers
 - **Phase 3:** .Build.cs file structure confirmation — validate module dependencies exist
 
 **Medium Priority:**
+
 - **Phase 5:** C# partial class merging semantics — test on real Unity projects
 - **Phase 5:** Unity lifecycle method list completeness — cross-check against official docs
 - **Phase 6:** Cross-language import resolution coherence — spot-check on multi-language projects
@@ -121,7 +125,7 @@ Next: Phase 1
 
 ### Work in Progress
 
-None (pre-execution).
+Plan 02 (01-02): CSharpParser implementation — Wave 0 tests ready.
 
 ### Completed Work
 
@@ -130,24 +134,27 @@ None (pre-execution).
 - [x] Roadmap created with 6 phases
 - [x] Success criteria derived for all phases
 - [x] 100% requirement coverage validated
+- [x] Plan 01-01: Infrastructure foundation — tree-sitter-c-sharp/cpp installed, .cs registered, SymbolInfo.properties added, Wave 0 test scaffold created (commits 3255c18, d33f70b)
 
 ### Pending
 
-- [ ] Phase 1 planning (C# parser plans)
+- [ ] Plan 01-02: CSharpParser implementation (21 tests to make green)
+- [ ] Plan 01-03: C# parser integration with pipeline
 - [ ] Phase 2 planning (AngelScript binding spike)
 - [ ] Phase 3 planning (UE5 C++ parser + macro extraction)
 - [ ] Phases 4–6 planning
-- [ ] Execution begins with Phase 1
 
 ---
 
 ## Session Continuity
 
-**Last session focus:** Research completed; roadmap created
-**Next session focus:** Phase 1 planning via `/gsd:plan-phase 1`
-**Context preserved in:** ROADMAP.md (structure), STATE.md (decisions), REQUIREMENTS.md (traceability)
+**Last session focus:** Plan 01-01 executed — infrastructure foundation complete
+**Stopped at:** Completed 01-01-PLAN.md
+**Next session focus:** Plan 01-02 — implement CSharpParser in csharp_lang.py to satisfy 21 failing tests
+**Context preserved in:** ROADMAP.md (structure), STATE.md (decisions), REQUIREMENTS.md (traceability), 01-01-SUMMARY.md
 
 **For future sessions:**
+
 - Phases 1–3 are critical path; parallel execution of Phase 2 recommended
 - Phase 3 macro extraction is highest fragility point; spike validation required
 - Phase 5 exemptions depend on Phases 1 and 3 being complete
