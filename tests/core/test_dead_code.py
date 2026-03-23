@@ -427,3 +427,45 @@ class TestProtocolConformance:
         partial_method = g.get_node(partial_method_id)
         assert partial_method is not None
         assert partial_method.is_dead is True
+
+
+class TestClearOverrideFalsePositives:
+    def test_extends_override_unflags_method(self) -> None:
+        """Method in child class should be un-flagged if base class method is alive."""
+        g = KnowledgeGraph()
+        _add_file_node(g, "src/base.py")
+        _add_file_node(g, "src/child.py")
+        _add_file_node(g, "src/main.py")
+
+        # Base class with a called (alive) method
+        base_cls_id = _add_symbol_node(g, NodeLabel.CLASS, "src/base.py", "Base")
+        base_method_id = _add_symbol_node(
+            g, NodeLabel.METHOD, "src/base.py", "render", class_name="Base"
+        )
+
+        # Child class that extends Base
+        child_cls_id = _add_symbol_node(g, NodeLabel.CLASS, "src/child.py", "Child")
+        child_method_id = _add_symbol_node(
+            g, NodeLabel.METHOD, "src/child.py", "render", class_name="Child"
+        )
+
+        # Entry point calls base.render (making it alive)
+        caller_id = _add_symbol_node(
+            g, NodeLabel.FUNCTION, "src/main.py", "main", is_entry_point=True
+        )
+        _add_calls_relationship(g, caller_id, base_method_id)
+
+        # Add EXTENDS relationship: Child -> Base
+        g.add_relationship(GraphRelationship(
+            id=f"extends:{child_cls_id}->{base_cls_id}",
+            type=RelType.EXTENDS,
+            source=child_cls_id,
+            target=base_cls_id,
+        ))
+
+        process_dead_code(g)
+
+        # child.render overrides alive base.render → should be un-flagged
+        child_method = g.get_node(child_method_id)
+        assert child_method is not None
+        assert child_method.is_dead is False

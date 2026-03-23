@@ -105,7 +105,7 @@ def read_file(repo_path: Path, file_path: Path) -> FileEntry | None:
         return None
 
     return FileEntry(
-        path=str(relative),
+        path=relative.as_posix(),
         content=content,
         language=language,
     )

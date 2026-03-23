@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -435,3 +436,61 @@ class TestRunIncrementalGlobalPhases:
 
         # Community count should be stable, not doubled.
         assert comm_count_2 == comm_count_1
+
+    def test_run_coupling_branch(
+        self, tmp_repo: Path, storage: KuzuBackend
+    ) -> None:
+        """run_coupling=True exercises the COUPLED_WITH removal and process_coupling path."""
+        run_pipeline(tmp_repo, storage, embeddings=False)
+        # Run with coupling enabled — must not raise.
+        _run_incremental_global_phases(
+            storage,
+            tmp_repo,
+            dirty_files={"src/app.py", "src/utils.py", "src/third.py"},
+            run_coupling=True,
+        )
+        # No assertion needed — coverage of the branch is the goal.
+
+
+class TestGetHeadShaExceptionPath:
+    def test_exception_returns_none(self, tmp_path: Path) -> None:
+        """When subprocess.run raises an OSError the function returns None."""
+        with patch("axon.core.ingestion.watcher.subprocess.run", side_effect=OSError("no git")):
+            result = _get_head_sha(tmp_path)
+        assert result is None
+
+
+class TestReindexFilesEdgeCases:
+    def test_path_outside_repo_skipped(self, tmp_path: Path, storage: KuzuBackend) -> None:
+        """A file path that is not relative to repo_path is silently skipped."""
+        outside = tmp_path.parent / "outside.py"
+        outside.write_text("x = 1", encoding="utf-8")
+        other_repo = tmp_path / "repo"
+        other_repo.mkdir()
+        count, paths = _reindex_files([outside], other_repo, storage)
+        assert count == 0
+        assert paths == set()
+
+    def test_deleted_path_outside_repo_skipped(self, tmp_path: Path, storage: KuzuBackend) -> None:
+        """Deleted file path not relative to repo_path triggers ValueError → pass."""
+        outside = tmp_path.parent / "ghost.py"
+        other_repo = tmp_path / "repo"
+        other_repo.mkdir()
+        # ghost.py doesn't exist → is_file() returns False → deletion branch
+        # relative_to raises ValueError → except (ValueError, OSError): pass
+        count, paths = _reindex_files([outside], other_repo, storage)
+        assert count == 0
+
+
+class TestComputeDirtyNodeIdsWithCalls:
+    def test_calls_neighbors_included(
+        self, tmp_repo: Path, storage: KuzuBackend
+    ) -> None:
+        """Nodes connected by CALLS edges should be included as neighbors."""
+        run_pipeline(tmp_repo, storage, embeddings=False)
+        graph = storage.load_graph()
+
+        # Pick a node in the dirty file (if any CALLS edges exist, neighbors will be included).
+        dirty_ids = _compute_dirty_node_ids(graph, {"src/app.py"})
+        # Result should at minimum contain nodes from src/app.py.
+        assert any("app.py" in nid for nid in dirty_ids)

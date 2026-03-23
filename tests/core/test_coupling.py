@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -9,7 +10,9 @@ from axon.core.graph.model import GraphNode, NodeLabel, RelType, generate_id
 from axon.core.ingestion.coupling import (
     build_cochange_matrix,
     calculate_coupling,
+    parse_git_log,
     process_coupling,
+    resolve_coupling,
 )
 
 
@@ -214,3 +217,107 @@ class TestProcessCoupling:
         for rel in coupled_rels:
             assert rel.id.startswith("coupled:")
             assert "->" in rel.id
+
+
+# ---------------------------------------------------------------------------
+# parse_git_log — error handling paths
+# ---------------------------------------------------------------------------
+
+class TestParseGitLog:
+    def test_returns_empty_on_nonzero_returncode(self, tmp_path: Path) -> None:
+        mock_result = MagicMock()
+        mock_result.returncode = 1
+        mock_result.stdout = ""
+        with patch("axon.core.ingestion.coupling.subprocess.run", return_value=mock_result):
+            commits = parse_git_log(tmp_path)
+        assert commits == []
+
+    def test_returns_empty_on_timeout(self, tmp_path: Path) -> None:
+        import subprocess
+        with patch("axon.core.ingestion.coupling.subprocess.run",
+                   side_effect=subprocess.TimeoutExpired("git", 30)):
+            commits = parse_git_log(tmp_path)
+        assert commits == []
+
+    def test_returns_empty_on_file_not_found(self, tmp_path: Path) -> None:
+        with patch("axon.core.ingestion.coupling.subprocess.run",
+                   side_effect=FileNotFoundError("git not found")):
+            commits = parse_git_log(tmp_path)
+        assert commits == []
+
+    def test_parses_commit_output(self, tmp_path: Path) -> None:
+        git_output = "COMMIT:abc123\nsrc/foo.py\nsrc/bar.py\n\nCOMMIT:def456\nsrc/foo.py\n"
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_result.stdout = git_output
+        with patch("axon.core.ingestion.coupling.subprocess.run", return_value=mock_result):
+            commits = parse_git_log(tmp_path)
+        assert len(commits) == 2
+        assert "src/foo.py" in commits[0]
+        assert "src/bar.py" in commits[0]
+        assert "src/foo.py" in commits[1]
+
+
+# ---------------------------------------------------------------------------
+# build_cochange_matrix — large commit skip
+# ---------------------------------------------------------------------------
+
+class TestBuildCochangeMatrixLargeCommit:
+    def test_large_commit_skipped(self) -> None:
+        # Create a commit with 51 files (> max_files_per_commit=50).
+        large_commit = [f"src/file{i}.py" for i in range(51)]
+        small_commit = ["src/a.py", "src/b.py", "src/a.py", "src/b.py", "src/a.py"]
+
+        matrix, total = build_cochange_matrix(
+            [large_commit, small_commit, small_commit, small_commit],
+            min_cochanges=1,
+        )
+
+        # The large commit pair should NOT be in the matrix.
+        for pair in matrix:
+            for f in pair:
+                assert f.startswith("src/a") or f.startswith("src/b"), (
+                    f"Large commit files should not appear in matrix: {f}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# resolve_coupling — file-not-in-graph and below-strength-threshold paths
+# ---------------------------------------------------------------------------
+
+class TestResolveCouplingEdgeCases:
+    def test_file_not_in_graph_skipped(self) -> None:
+        """Pairs where one file is not in the graph produce no edges."""
+        graph = KnowledgeGraph()
+        # Only add auth.py to the graph — models.py is absent.
+        graph.add_node(GraphNode(
+            id=generate_id(NodeLabel.FILE, "src/auth.py"),
+            label=NodeLabel.FILE,
+            name="auth.py",
+            file_path="src/auth.py",
+        ))
+
+        commits = [
+            ["src/auth.py", "src/models.py"],
+            ["src/auth.py", "src/models.py"],
+            ["src/auth.py", "src/models.py"],
+        ]
+        edges = resolve_coupling(graph, Path("/fake"), min_strength=0.3, commits=commits, min_cochanges=1)
+        assert edges == []
+
+    def test_low_strength_pair_skipped(self) -> None:
+        """Pairs below min_strength but above min_cochanges produce no edges."""
+        graph = KnowledgeGraph()
+        for path in ("src/a.py", "src/b.py"):
+            graph.add_node(GraphNode(
+                id=generate_id(NodeLabel.FILE, path),
+                label=NodeLabel.FILE,
+                name=path.split("/")[-1],
+                file_path=path,
+            ))
+
+        # a+b co-change 3 times; a changes 20 times total.
+        # coupling = min(3/20, 3/3) = 0.15 < min_strength=0.3
+        commits = [["src/a.py", "src/b.py"]] * 3 + [["src/a.py"]] * 17
+        edges = resolve_coupling(graph, Path("/fake"), min_strength=0.3, commits=commits, min_cochanges=1)
+        assert edges == []

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from axon.core.diff import StructuralDiff, diff_graphs, format_diff
+from axon.core.diff import StructuralDiff, _normalize_id, diff_graphs, format_diff
 from axon.core.graph.model import (
     GraphNode,
     GraphRelationship,
@@ -215,3 +215,26 @@ class TestFormatDiffFullSummary:
         result = format_diff(diff)
 
         assert "3 changes" in result
+
+
+# ---------------------------------------------------------------------------
+# _normalize_id
+# ---------------------------------------------------------------------------
+
+class TestNormalizeId:
+    def test_replaces_prefix(self) -> None:
+        result = _normalize_id("/tmp/worktree/src/foo.py", "/tmp/worktree", "/repo")
+        assert result == "/repo/src/foo.py"
+
+    def test_no_match_returns_original(self) -> None:
+        result = _normalize_id("/other/src/foo.py", "/tmp/worktree", "/repo")
+        assert result == "/other/src/foo.py"
+
+    def test_empty_src_returns_original(self) -> None:
+        result = _normalize_id("function:src/foo.py:bar", "", "/dst")
+        assert result == "function:src/foo.py:bar"
+
+    def test_exact_prefix_match(self) -> None:
+        wt = "/tmp/axon_diff_xyz/worktree"
+        result = _normalize_id(wt, wt, "/home/user/repo")
+        assert result == "/home/user/repo"

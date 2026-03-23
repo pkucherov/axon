@@ -79,7 +79,7 @@ def _reindex_files(
     for abs_path in changed_paths:
         if not abs_path.is_file():
             try:
-                relative = str(abs_path.relative_to(repo_path))
+                relative = abs_path.relative_to(repo_path).as_posix()
                 storage.remove_nodes_by_file(relative)
                 reindexed_paths.add(relative)
             except (ValueError, OSError):
@@ -87,7 +87,7 @@ def _reindex_files(
             continue
 
         try:
-            relative = str(abs_path.relative_to(repo_path))
+            relative = abs_path.relative_to(repo_path).as_posix()
         except ValueError:
             continue
 

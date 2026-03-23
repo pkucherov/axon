@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
-from axon.core.ingestion.walker import discover_files, walk_repo
+from axon.core.ingestion.walker import _discover_via_git, discover_files, walk_repo
 
 
 @pytest.fixture()
@@ -124,14 +126,14 @@ class TestDiscoverFiles:
         assert all(isinstance(p, Path) for p in paths)
 
         # Should find the same source files
-        rel_paths = {str(p.relative_to(tmp_repo.resolve())) for p in paths}
+        rel_paths = {p.relative_to(tmp_repo.resolve()).as_posix() for p in paths}
         assert "src/main.py" in rel_paths
         assert "src/utils.py" in rel_paths
         assert "lib/index.ts" in rel_paths
 
         # Should exclude ignored / unsupported
         for p in paths:
-            rel = str(p.relative_to(tmp_repo.resolve()))
+            rel = p.relative_to(tmp_repo.resolve()).as_posix()
             assert "node_modules" not in rel
             assert "__pycache__" not in rel
             assert not rel.endswith(".md")
@@ -172,3 +174,44 @@ class TestWalkRepoSkipsBinary:
 
         assert "binary.py" not in paths
         assert "valid.py" in paths
+
+
+class TestDiscoverViaGit:
+    def test_git_success_path(self, tmp_repo: Path) -> None:
+        """When git ls-files succeeds, _discover_via_git returns files."""
+        git_output = "src/main.py\nsrc/utils.py\nlib/index.ts\n"
+        mock_result = type("R", (), {"returncode": 0, "stdout": git_output})()
+        with patch("axon.core.ingestion.walker.subprocess.run", return_value=mock_result):
+            result = _discover_via_git(tmp_repo, None)
+        assert result is not None
+        assert any(p.name == "main.py" for p in result)
+        assert any(p.name == "utils.py" for p in result)
+
+    def test_git_nonzero_returns_none(self, tmp_repo: Path) -> None:
+        mock_result = type("R", (), {"returncode": 128, "stdout": ""})()
+        with patch("axon.core.ingestion.walker.subprocess.run", return_value=mock_result):
+            result = _discover_via_git(tmp_repo, None)
+        assert result is None
+
+    def test_git_timeout_returns_none(self, tmp_repo: Path) -> None:
+        with patch("axon.core.ingestion.walker.subprocess.run",
+                   side_effect=subprocess.TimeoutExpired("git", 10)):
+            result = _discover_via_git(tmp_repo, None)
+        assert result is None
+
+    def test_git_not_found_returns_none(self, tmp_repo: Path) -> None:
+        with patch("axon.core.ingestion.walker.subprocess.run",
+                   side_effect=FileNotFoundError("git not found")):
+            result = _discover_via_git(tmp_repo, None)
+        assert result is None
+
+    def test_discover_files_uses_git_result(self, tmp_repo: Path) -> None:
+        """discover_files returns git result when git succeeds."""
+        # Use real paths so Path objects are valid
+        main_py = (tmp_repo / "src" / "main.py").resolve()
+        git_output = "src/main.py\n"
+        mock_result = type("R", (), {"returncode": 0, "stdout": git_output})()
+        with patch("axon.core.ingestion.walker.subprocess.run", return_value=mock_result):
+            paths = discover_files(tmp_repo)
+        # Paths come from git output + is_supported filter
+        assert all(isinstance(p, Path) for p in paths)
