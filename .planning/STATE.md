@@ -1,0 +1,158 @@
+# State — Axon Language Extension: C#, UE5 C++, AngelScript
+
+**Milestone:** v1 Language Support
+**Created:** 2026-03-23
+**Last Updated:** 2026-03-23
+
+---
+
+## Project Reference
+
+**Core Value:** AI agents and developers can navigate, search, and understand Unreal Engine 5 and Unity codebases with correct UE5 macro semantics, module boundaries, Blueprint exposure, and lifecycle method awareness surfaced in the code intelligence graph.
+
+**Current Focus:** Foundation phases (1–3) establish parser infrastructure and UE5 awareness framework.
+
+**Constraints:**
+- Tech stack: tree-sitter parsers (consistent with existing Python/TypeScript)
+- Parser protocol: must implement LanguageParser and emit ParseResult dataclass
+- Graph model: new node/relationship types in model.py; KuzuDB schema automatic
+- Compatibility: existing Python/TS indexing must remain unaffected
+- No new infrastructure: embedded KuzuDB only, no external services
+
+---
+
+## Current Position
+
+**Phase:** Pre-execution (roadmap created, awaiting planning)
+**Plan:** None active
+**Status:** Ready for Phase 1 planning
+**Progress:** 0/29 requirements complete
+
+```
+Roadmap Timeline
+================
+
+[1: C# Foundation]
+       │
+       ├─→ [2: AngelScript Binding] (parallel)
+       │
+       ├─→ [3: UE5 C++ Parser]
+       │       │
+       │       └─→ [4: AngelScript Parser]
+       │       └─→ [5: Dead-Code Exemptions]
+       │
+       └─→ [6: Module Nodes & Validation]
+
+Current: START
+Next: Phase 1
+```
+
+---
+
+## Performance Metrics
+
+**Test Coverage Target:** 90% on core modules (inherited from existing baseline of 818 tests, 3505 stmts)
+
+**Expected new test files:**
+- `tests/core/test_parser_csharp.py` — 80+ tests for C# parser
+- `tests/core/test_parser_cpp_ue5.py` — 100+ tests for UE5 C++ parser (macro extraction focus)
+- `tests/core/test_parser_angelscript.py` — 80+ tests for AngelScript parser
+- Extended `tests/core/test_dead_code.py` — Blueprint/lifecycle exemptions
+- Extended `tests/core/test_ue5_utils.py` — UE5 macro patterns, base class registry
+
+**Estimated new lines of test code:** 300+ tests, ~3000 lines
+
+**Coverage by module (post-completion):**
+- `csharp_parser.py`: Target 90%
+- `cpp_ue5_parser.py`: Target 90%
+- `angelscript_parser.py`: Target 90%
+- `ue5_utils.py`: Target 95%
+- `dead_code.py`: Extended to 92% (macros + lifecycle)
+
+---
+
+## Accumulated Context
+
+### Key Decisions Locked
+
+1. **Parser build order:** C# → UE5 C++ → AngelScript
+   - C# has no macro preprocessing; establishes baseline pattern
+   - UE5 C++ depends on C# pattern; enables ue5_utils.py for Phase 3
+   - AngelScript reuses C++ patterns; highest risk (grammar uncertainty)
+
+2. **UE5 metadata storage:** Properties dict, not separate graph nodes
+   - UCLASS/UFUNCTION/UPROPERTY stored in `node.properties["ue_specifiers"]`
+   - Keeps graph model simple; avoids bloat; queryable via JSON fields
+   - Dead-code exemptions check properties dict only
+
+3. **Exemption logic:** Centralized in dead_code.py + ue5_utils.py
+   - Parsers extract facts (decorators, attributes, macros)
+   - Exemption checks are pure functions; no language-specific coupling
+   - All changes to exemption logic require test validation
+
+4. **AngelScript binding strategy:** Custom Python binding (2-3 weeks) vs regex fallback
+   - Phase 2 spike validates Relrin/tree-sitter-angelscript grammar
+   - If grammar insufficient, fallback to regex-based parser (lower confidence but faster)
+   - Decision locked by end of Phase 2
+
+5. **Module nodes deferral:** Phase 6, separable from parsing
+   - .Build.cs parsing can wait until core three languages work
+   - MODULE node type added late in milestone (low risk if deferred to v2)
+   - Enables v1 to ship without architectural components
+
+### Research Risks (Tracked)
+
+**High Priority:**
+- **Phase 2:** AngelScript grammar availability and Python binding feasibility — spike validates
+- **Phase 3:** UE5 macro extraction edge cases (multiline, nested parentheses) — regex tested on real headers
+- **Phase 3:** .Build.cs file structure confirmation — validate module dependencies exist
+
+**Medium Priority:**
+- **Phase 5:** C# partial class merging semantics — test on real Unity projects
+- **Phase 5:** Unity lifecycle method list completeness — cross-check against official docs
+- **Phase 6:** Cross-language import resolution coherence — spot-check on multi-language projects
+
+### Probable Blockers
+
+1. **AngelScript grammar not available/unmaintained** → Fallback to regex parser (Phase 2 spike mitigates)
+2. **UE5 macro extraction fragile on edge cases** → Comprehensive regex tests + real-world validation (Phase 3 includes spike)
+3. **Import resolution missing across languages** → Phase 5 includes spot-check validation
+4. **Partial class handling in C#** → Document limitations in Phase 1; defer deeper semantic merging to v2
+
+### Work in Progress
+
+None (pre-execution).
+
+### Completed Work
+
+- [x] Research completed (SUMMARY.md validated)
+- [x] Requirements extracted and categorized (29 total)
+- [x] Roadmap created with 6 phases
+- [x] Success criteria derived for all phases
+- [x] 100% requirement coverage validated
+
+### Pending
+
+- [ ] Phase 1 planning (C# parser plans)
+- [ ] Phase 2 planning (AngelScript binding spike)
+- [ ] Phase 3 planning (UE5 C++ parser + macro extraction)
+- [ ] Phases 4–6 planning
+- [ ] Execution begins with Phase 1
+
+---
+
+## Session Continuity
+
+**Last session focus:** Research completed; roadmap created
+**Next session focus:** Phase 1 planning via `/gsd:plan-phase 1`
+**Context preserved in:** ROADMAP.md (structure), STATE.md (decisions), REQUIREMENTS.md (traceability)
+
+**For future sessions:**
+- Phases 1–3 are critical path; parallel execution of Phase 2 recommended
+- Phase 3 macro extraction is highest fragility point; spike validation required
+- Phase 5 exemptions depend on Phases 1 and 3 being complete
+- Phase 6 is optional end-of-milestone; can defer to v2 if time constrained
+
+---
+
+*Last updated: 2026-03-23 (initial creation)*

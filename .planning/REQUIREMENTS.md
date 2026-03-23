@@ -73,12 +73,32 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 through INFRA-04 | Phase 1 | — |
-| INFRA-05 | Phase 1 | — |
-| INFRA-06 | Phase 3 (spike) | — |
-| CS-01 through CS-04 | Phase 1 | — |
-| CS-05 through CS-06 | Phase 2 | — |
-| CPP-01 through CPP-04 | Phase 2 | — |
-| CPP-05 through CPP-08 | Phase 2 | — |
-| AS-01 through AS-04 | Phase 3 | — |
-| MOD-01 through MOD-05 | Phase 4 | — |
+| INFRA-01 | Phase 1 | Pending |
+| INFRA-02 | Phase 3 | Pending |
+| INFRA-03 | Phase 4 | Pending |
+| INFRA-04 | Phase 6 | Pending |
+| INFRA-05 | Phase 1 | Pending |
+| INFRA-06 | Phase 2 | Pending |
+| CS-01 | Phase 1 | Pending |
+| CS-02 | Phase 1 | Pending |
+| CS-03 | Phase 1 | Pending |
+| CS-04 | Phase 1 | Pending |
+| CS-05 | Phase 5 | Pending |
+| CS-06 | Phase 5 | Pending |
+| CPP-01 | Phase 3 | Pending |
+| CPP-02 | Phase 3 | Pending |
+| CPP-03 | Phase 3 | Pending |
+| CPP-04 | Phase 3 | Pending |
+| CPP-05 | Phase 5 | Pending |
+| CPP-06 | Phase 5 | Pending |
+| CPP-07 | Phase 3 | Pending |
+| CPP-08 | Phase 3 | Pending |
+| AS-01 | Phase 4 | Pending |
+| AS-02 | Phase 4 | Pending |
+| AS-03 | Phase 4 | Pending |
+| AS-04 | Phase 4 | Pending |
+| MOD-01 | Phase 6 | Pending |
+| MOD-02 | Phase 6 | Pending |
+| MOD-03 | Phase 6 | Pending |
+| MOD-04 | Phase 6 | Pending |
+| MOD-05 | Phase 6 | Pending |
