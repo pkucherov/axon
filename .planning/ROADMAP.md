@@ -59,7 +59,11 @@ Plans:
 3. The grammar can extract functions, methods, and classes from UnrealAngel AngelScript syntax
 4. Grammar limitations are documented and any fallback strategy (regex vs tree-sitter) is decided
 
-**Plans:** TBD
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Vendor dimitrijejankov grammar + create Python binding scaffold (binding.c, setup.py, pyproject.toml)
+- [ ] 02-02-PLAN.md — Wire path dependency, compile via uv sync, write and run spike tests (D-07 validation)
 
 **UI hint**: no
 
@@ -148,7 +152,7 @@ Plans:
 | Phase | Goal | Requirements | Status | Completed |
 |-------|------|--------------|--------|-----------|
 | 1. C# Parser Foundation | Parser pattern + symbol extraction | 3/3 | Complete   | 2026-03-23 |
-| 2. AngelScript Binding Spike | Binding research + validation | 1 | Not started | — |
+| 2. AngelScript Binding Spike | Binding research + validation | 1 | Planned (2 plans) | — |
 | 3. UE5 C++ Parser & Macro Extraction | Macro extraction + parsing | 9 | Not started | — |
 | 4. AngelScript Parser Implementation | Parser + UE5 annotations | 4 | Not started | — |
 | 5. Dead-Code Exemptions & Unity Integration | Exemption logic + false-positive reduction | 4 | Not started | — |
@@ -186,4 +190,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-03-23 (Phase 1 planned: 3 plans, 3 waves)*
+*Last updated: 2026-03-27 (Phase 2 planned: 2 plans, 2 waves)*
