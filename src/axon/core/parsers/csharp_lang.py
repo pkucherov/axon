@@ -388,9 +388,7 @@ class CSharpParser(LanguageParser):
                 )
             )
 
-    def _extract_heritage(
-        self, class_name: str, base_list_node: Node, result: ParseResult
-    ) -> None:
+    def _extract_heritage(self, class_name: str, base_list_node: Node, result: ParseResult) -> None:
         """Extract heritage tuples from a base_list node.
 
         Uses I-prefix heuristic to distinguish implements from extends:
@@ -460,9 +458,7 @@ class CSharpParser(LanguageParser):
             if type_node.type == "identifier":
                 type_name = type_node.text.decode("utf8")
             elif type_node.type == "generic_name":
-                type_name = (
-                    type_node.children[0].text.decode("utf8") if type_node.children else ""
-                )
+                type_name = type_node.children[0].text.decode("utf8") if type_node.children else ""
             elif type_node.type == "predefined_type":
                 type_name = type_node.text.decode("utf8")  # will be in _BUILTIN_TYPES
             else:

@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import pytest
 
+from axon.config.languages import get_language
+
 # This import will fail (ModuleNotFoundError) until Plan 02 creates csharp_lang.py.
 # That is intentional — these are the failing stubs.
-from axon.core.parsers.csharp_lang import CSharpParser  # noqa: F401 (used in tests below)
-from axon.config.languages import get_language
 from axon.core.parsers.base import SymbolInfo
-
+from axon.core.parsers.csharp_lang import CSharpParser  # noqa: F401 (used in tests below)
 
 # ── INFRA-01 ────────────────────────────────────────────────────────────────
+
 
 class TestRegistration:
     def test_cs_extension_maps_to_csharp(self):
@@ -36,10 +37,12 @@ class TestRegistration:
 
 # ── INFRA-05 ────────────────────────────────────────────────────────────────
 
+
 class TestImport:
     def test_tree_sitter_csharp_importable(self):
         """INFRA-05: tree-sitter-c-sharp package must be importable."""
         import tree_sitter_c_sharp as tscsharp  # noqa: F401
+
         assert callable(tscsharp.language)
 
     def test_csharp_parser_instantiates(self):
@@ -69,6 +72,7 @@ public interface IRepository
     int Count { get; }
 }
 """
+
 
 class TestSymbolExtraction:
     def test_class_node_extracted(self):
@@ -121,6 +125,7 @@ namespace MyApp;
 public class Foo { }
 """
 
+
 class TestImportResolution:
     def test_plain_using_extracted(self):
         """CS-02: Plain `using Namespace;` produces an ImportInfo."""
@@ -163,6 +168,7 @@ public class Cat : Animal, IDisposable { }
 public interface IDisposable { }
 """
 
+
 class TestHeritage:
     def test_extends_edge_from_single_parent(self):
         """CS-03: Single base class produces an EXTENDS heritage tuple."""
@@ -201,6 +207,7 @@ public class Entity
     public bool IsActive => true;
 }
 """
+
 
 class TestProperties:
     def test_auto_property_as_method_node(self):
@@ -418,7 +425,11 @@ class TestNamespacePropagation:
         parser = CSharpParser()
         result = parser.parse(_NS_BLOCK_CS, "Foo.cs")
         ctor = next(
-            (s for s in result.symbols if s.name == "Foo" and s.kind == "method" and s.class_name == "Foo"),
+            (
+                s
+                for s in result.symbols
+                if s.name == "Foo" and s.kind == "method" and s.class_name == "Foo"
+            ),
             None,
         )
         assert ctor is not None, "Constructor 'Foo' not found in symbols"
