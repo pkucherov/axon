@@ -240,6 +240,8 @@ class CSharpParser(LanguageParser):
         props: dict = {}
         if attributes:
             props["cs_attributes"] = attributes
+        if self._current_namespace:
+            props["cs_namespace"] = self._current_namespace
 
         result.symbols.append(
             SymbolInfo(
@@ -270,6 +272,10 @@ class CSharpParser(LanguageParser):
         end_line = node.end_point[0] + 1
         node_content = content[node.start_byte : node.end_byte]
 
+        props: dict = {}
+        if self._current_namespace:
+            props["cs_namespace"] = self._current_namespace
+
         result.symbols.append(
             SymbolInfo(
                 name=ctor_name,
@@ -278,6 +284,7 @@ class CSharpParser(LanguageParser):
                 end_line=end_line,
                 content=node_content,
                 class_name=class_name,
+                properties=props,
             )
         )
 
@@ -302,6 +309,10 @@ class CSharpParser(LanguageParser):
         type_str = type_node.text.decode("utf8") if type_node else ""
         signature = f"{type_str} {prop_name}" if type_str else prop_name
 
+        props: dict = {}
+        if self._current_namespace:
+            props["cs_namespace"] = self._current_namespace
+
         result.symbols.append(
             SymbolInfo(
                 name=prop_name,
@@ -311,6 +322,7 @@ class CSharpParser(LanguageParser):
                 content=node_content,
                 signature=signature,
                 class_name=class_name,
+                properties=props,
             )
         )
 

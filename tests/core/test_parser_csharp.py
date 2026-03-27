@@ -377,3 +377,73 @@ class TestQualifyCollisions:
         # Methods with same name should NOT be renamed
         assert method1.name == "DoWork"
         assert method2.name == "DoWork"
+
+
+# ── Namespace Propagation on Method/Constructor/Property (Plan 04 gap closure) ──
+
+
+_NS_BLOCK_CS = """\
+namespace MyApp.Services
+{
+    class Foo
+    {
+        void Bar() { }
+        Foo() { }
+        public int Age { get; set; }
+    }
+}
+"""
+
+_NO_NS_CS = """\
+class Bare
+{
+    void Run() { }
+    Bare() { }
+    public string Label { get; }
+}
+"""
+
+
+class TestNamespacePropagation:
+    def test_method_inside_namespace_has_cs_namespace(self):
+        """Plan 04 gap #6: method nodes inside a namespace block carry cs_namespace."""
+        parser = CSharpParser()
+        result = parser.parse(_NS_BLOCK_CS, "Foo.cs")
+        bar = next((s for s in result.symbols if s.name == "Bar" and s.kind == "method"), None)
+        assert bar is not None, "Method 'Bar' not found in symbols"
+        assert bar.properties.get("cs_namespace") == "MyApp.Services"
+
+    def test_constructor_inside_namespace_has_cs_namespace(self):
+        """Plan 04 gap #6: constructor nodes inside a namespace block carry cs_namespace."""
+        parser = CSharpParser()
+        result = parser.parse(_NS_BLOCK_CS, "Foo.cs")
+        ctor = next(
+            (s for s in result.symbols if s.name == "Foo" and s.kind == "method" and s.class_name == "Foo"),
+            None,
+        )
+        assert ctor is not None, "Constructor 'Foo' not found in symbols"
+        assert ctor.properties.get("cs_namespace") == "MyApp.Services"
+
+    def test_property_inside_namespace_has_cs_namespace(self):
+        """Plan 04 gap #6: property nodes inside a namespace block carry cs_namespace."""
+        parser = CSharpParser()
+        result = parser.parse(_NS_BLOCK_CS, "Foo.cs")
+        age = next((s for s in result.symbols if s.name == "Age" and s.kind == "method"), None)
+        assert age is not None, "Property 'Age' not found in symbols"
+        assert age.properties.get("cs_namespace") == "MyApp.Services"
+
+    def test_method_outside_namespace_has_no_cs_namespace(self):
+        """No regression: methods outside any namespace have no cs_namespace key."""
+        parser = CSharpParser()
+        result = parser.parse(_NO_NS_CS, "Bare.cs")
+        run = next((s for s in result.symbols if s.name == "Run" and s.kind == "method"), None)
+        assert run is not None, "Method 'Run' not found in symbols"
+        assert "cs_namespace" not in run.properties
+
+    def test_class_inside_namespace_still_has_cs_namespace(self):
+        """No regression: class nodes inside a namespace block still carry cs_namespace."""
+        parser = CSharpParser()
+        result = parser.parse(_NS_BLOCK_CS, "Foo.cs")
+        foo_cls = next((s for s in result.symbols if s.name == "Foo" and s.kind == "class"), None)
+        assert foo_cls is not None, "Class 'Foo' not found in symbols"
+        assert foo_cls.properties.get("cs_namespace") == "MyApp.Services"
